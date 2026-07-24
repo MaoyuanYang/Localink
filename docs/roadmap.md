@@ -3,7 +3,7 @@
 > 唯一进度源。每个迭代完成后勾选并标注日期。规则见 [AGENTS.md](../AGENTS.md)。
 
 ## M0 工程奠基
-- [ ] M0.1 需求文档 PRD：业务边界、角色、功能清单（`docs/prd.md`）
+- [x] M0.1 需求文档 PRD：业务边界、角色、功能清单（`docs/prd.md`）—— 2026-07-24
 - [ ] M0.2 架构设计文档：模块划分、技术选型表、依赖图（`docs/architecture.md`）
 - [ ] M0.3 中间件环境安装：MySQL 8 / Redis / Kafka 安装指引 + 连通性验证
 - [ ] M0.4 Maven 多模块骨架：parent pom + 空子模块 + 可启动的空应用（含 Maven Wrapper）
