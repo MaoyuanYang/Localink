@@ -5,7 +5,7 @@
 ## M0 工程奠基
 - [x] M0.1 需求文档 PRD：业务边界、角色、功能清单（`docs/prd.md`）—— 2026-07-24
 - [x] M0.2 架构设计文档：模块划分、技术选型表、依赖图（`docs/architecture.md`）—— 2026-07-24
-- [ ] M0.3 中间件环境安装：MySQL 8 / Redis / Kafka 安装指引 + 连通性验证
+- [x] M0.3 中间件环境安装：MySQL 8 / Redis / Kafka 安装指引 + 连通性验证 —— 2026-07-24
 - [ ] M0.4 Maven 多模块骨架：parent pom + 空子模块 + 可启动的空应用（含 Maven Wrapper）
 - [ ] M0.5 common 模块：统一返回 Result + 错误码枚举 + 异常体系 + 全局异常处理器
 - [ ] M0.6 Git 规范落地：.gitignore、分支策略、Conventional Commits、首个 feature 分支 PR 演示

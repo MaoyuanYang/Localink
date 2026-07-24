@@ -84,6 +84,7 @@ docs/
 
 ## 10. 环境与常用命令
 
-- JDK 21（编译目标 17）；Maven Wrapper（`mvnw.cmd`，M0.4 引入）
-- 中间件：MySQL 8 / Redis / Kafka / ES 的安装与验证见 `docs/middleware-setup.md`
-- 常用命令随模块落地后补充到本节
+- JDK 21（编译目标 17）；构建一律使用 Maven Wrapper：`.\mvnw.cmd`
+- 中间件：MySQL 8 / Redis / Kafka / ES 的安装与验证见 `docs/middleware-setup.md`（`docker compose up -d mysql redis kafka`）
+- 全量构建：`.\mvnw.cmd clean package "-DskipTests"`（PowerShell 中 `-D` 参数必须加引号）
+- 启动服务：`java -jar localink-server/target/localink-server-0.0.1-SNAPSHOT.jar`（端口 8086，`GET /ping` 冒烟）
