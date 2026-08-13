@@ -8,6 +8,7 @@
 
 - **项目名称**：Localink —— 本地生活社区平台
 - **项目目标**：Java 后端求职作品。完整复现"高并发优惠券秒杀 + 热点查询"企业级能力，并扩展 UGC 社区（帖子/Feed/搜索/热榜/审核）形成差异化
+- **Web 端**：`localink-web/`（React+TS 演示界面，C 端 + 运营后台双区，M1 后启动，设计见 `docs/web-frontend.md`）
 - **参考项目**：`../hmdp-plus`（开源项目，仅作设计参考）
 - **仓库**：https://github.com/MaoyuanYang/Localink.git
 
@@ -32,6 +33,7 @@
 | 搜索 | Elasticsearch（M6 引入） | 8.x |
 | 工具 | Lombok / Hutool / fastjson2 / Knife4j | — |
 | 根包名 | `com.localink` | — |
+| 前端（localink-web/） | React + TypeScript + Vite + Ant Design + Zustand + Axios | 18 / 6 / 5.x |
 
 ## 4. 迭代流程（六步闭环，每个迭代必须走完）
 
@@ -60,6 +62,12 @@
 - 配置外置 `application.yml`，环境差异走 `application-{profile}.yml`
 - 每个 Controller 方法入参用 DTO + jakarta.validation 校验
 
+**前端（localink-web/，W0 起生效）**
+- 单工程双区：`/` C 端、`/admin` 运营后台，共享 `api/types/utils`；目录约定与对接规范见 `docs/web-frontend.md`
+- 不是 Maven 模块，不参与 `mvnw package`；独立 npm 链路
+- 类型定义手写对齐 `localink-api-model` 的 DTO/VO；统一走 axios 拦截器注入 token、解包 `Result`
+- 不超前开发（后端 API 未就绪的页面不动工）、不维护 mock
+
 ## 7. 文档结构
 
 ```
@@ -69,6 +77,7 @@ docs/
 ├── database.md         # 数据库设计（M1.1）
 ├── roadmap.md          # 迭代路线图（勾选跟踪）
 ├── middleware-setup.md # 中间件安装指引（M0.3）
+├── web-frontend.md     # Web 前端设计（M0.7）
 └── iterations/         # 每迭代一张任务卡
     └── mX-Y-名称.md
 ```
