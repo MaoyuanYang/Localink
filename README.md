@@ -65,7 +65,7 @@ curl http://localhost:8086/ping   # -> pong
 |---|---|
 | [docs/prd.md](docs/prd.md) | 产品需求文档 |
 | [docs/architecture.md](docs/architecture.md) | 架构设计（模块划分/选型/链路图） |
-| [docs/roadmap.md](docs/roadmap.md) | 迭代路线图（45 个迭代勾选跟踪） |
+| [docs/roadmap.md](docs/roadmap.md) | 迭代路线图（勾选跟踪） |
 | [docs/middleware-setup.md](docs/middleware-setup.md) | 中间件安装与验证指引 |
 | [docs/iterations/](docs/iterations/) | 每个迭代的任务卡（设计取舍/验证记录/学习清单） |
 | [AGENTS.md](AGENTS.md) | 项目开发与协作最高规范 |
