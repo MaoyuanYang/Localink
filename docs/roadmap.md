@@ -9,6 +9,7 @@
 - [ ] M0.4 Maven 多模块骨架：parent pom + 空子模块 + 可启动的空应用（含 Maven Wrapper）
 - [ ] M0.5 common 模块：统一返回 Result + 错误码枚举 + 异常体系 + 全局异常处理器
 - [ ] M0.6 Git 规范落地：.gitignore、分支策略、Conventional Commits、首个 feature 分支 PR 演示
+- [ ] M0.7 前端规划：PRD Web 端需求（4.7）+ 前端设计文档（`docs/web-frontend.md`）+ roadmap 前端线登记
 
 ## M1 基础业务闭环（单库）
 - [ ] M1.1 数据库设计文档：ER 图 + 12 张表字段说明（`docs/database.md`）
@@ -91,3 +92,13 @@
 - [ ] M7.2 调优对比：优化前后 QPS/RT 数据报告
 - [ ] M7.3 交付文档：部署文档 + 架构图 + README
 - [ ] M7.4 面试弹药：30 道自测题 + 简历 bullets 打磨
+
+## Web 前端线（localink-web/，React 18 + TS + Vite + AntD5，M1 完成后启动）
+
+> 定位：后端能力的演示载体。设计文档见 `docs/web-frontend.md`，需求编号见 PRD 4.7。每个 W 迭代严格随后端里程碑的就绪 API 推进，不超前开发、不维护 mock。
+
+- [ ] W0 骨架 + 账户商户闭环：Vite 工程（路由/Axios 封装/token 管理/dev proxy → :8086）+ 登录页 + 商户列表/详情 + 普通券领取 —— 前置：M1
+- [ ] W1 秒杀演示：秒杀券详情（倒计时 + 抢购按钮状态机）+ 我的订单 —— 前置：M3
+- [ ] W2 运营后台①：/admin 布局 + 登录守卫 + 商户/券管理 + 订阅提醒 + 订单状态（超时关闭）展示 —— 前置：M5
+- [ ] W3 社区 + 后台②：Feed/发帖（图片上传）/评论/点赞/关注/搜索/热榜/签到 + 审核队列 + Top买家/对账看板 —— 前置：M6
+- [ ] W4 打磨：加载/空态、README、部署说明（nginx） —— 前置：M7
