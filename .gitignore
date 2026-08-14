@@ -13,3 +13,9 @@ target/
 logs/
 *.log
 HELP.md
+
+# 本地环境配置（含真实账号密码，禁止入库，见 AGENTS.md §5）
+application-local.yml
+application-local.yaml
+application-local.properties
+*.env
