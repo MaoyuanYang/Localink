@@ -9,7 +9,7 @@
 - [x] M0.4 Maven 多模块骨架：parent pom + 空子模块 + 可启动的空应用（含 Maven Wrapper）—— 2026-08-13
 - [x] M0.5 common 模块：统一返回 Result + 错误码枚举 + 异常体系 + 全局异常处理器 —— 2026-08-14
 - [x] M0.6 Git 规范落地：.gitignore、分支策略、Conventional Commits、首个 feature 分支 PR 演示 —— 2026-08-14
-- [ ] M0.7 前端规划：PRD Web 端需求（4.7）+ 前端设计文档（`docs/web-frontend.md`）+ roadmap 前端线登记
+- [x] M0.7 前端规划：PRD Web 端需求（4.7）+ 前端设计文档（`docs/web-frontend.md`）+ roadmap 前端线登记 —— 2026-08-14
 
 ## M1 基础业务闭环（单库）
 - [ ] M1.1 数据库设计文档：ER 图 + 12 张表字段说明（`docs/database.md`）
