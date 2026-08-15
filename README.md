@@ -67,6 +67,7 @@ curl http://localhost:8086/ping   # -> pong
 |---|---|
 | [docs/prd.md](docs/prd.md) | 产品需求文档 |
 | [docs/architecture.md](docs/architecture.md) | 架构设计（模块划分/选型/链路图） |
+| [docs/database.md](docs/database.md) | 数据库设计（ER 图/12 张表字段说明） |
 | [docs/roadmap.md](docs/roadmap.md) | 迭代路线图（勾选跟踪） |
 | [docs/middleware-setup.md](docs/middleware-setup.md) | 中间件安装与验证指引 |
 | [docs/web-frontend.md](docs/web-frontend.md) | Web 前端设计（localink-web/，M1 后启动） |
