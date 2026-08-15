@@ -12,7 +12,7 @@
 - [x] M0.7 前端规划：PRD Web 端需求（4.7）+ 前端设计文档（`docs/web-frontend.md`）+ roadmap 前端线登记 —— 2026-08-14
 
 ## M1 基础业务闭环（单库）
-- [ ] M1.1 数据库设计文档：ER 图 + 12 张表字段说明（`docs/database.md`）
+- [x] M1.1 数据库设计文档：ER 图 + 12 张表字段说明（`docs/database.md`）—— 2026-08-15
 - [ ] M1.2 单库建表 SQL + HikariCP + MyBatis-Plus 接入
 - [ ] M1.3 发送短信验证码（Redis 存验证码 + TTL）
 - [ ] M1.4 登录/注册（UUID token + Redis Hash 会话）
