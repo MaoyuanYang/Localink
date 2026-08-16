@@ -12,6 +12,8 @@ public enum BaseCode {
 
     SUCCESS(0, "成功"),
 
+    SMS_SEND_TOO_FREQUENT(20001, "请勿频繁获取验证码"),
+
     SYSTEM_ERROR(40000, "系统繁忙，请稍后再试"),
     PARAM_ERROR(40001, "请求参数错误"),
     UNAUTHORIZED(40002, "未登录或登录已过期"),
