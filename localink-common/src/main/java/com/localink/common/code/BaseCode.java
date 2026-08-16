@@ -13,6 +13,8 @@ public enum BaseCode {
     SUCCESS(0, "成功"),
 
     SMS_SEND_TOO_FREQUENT(20001, "请勿频繁获取验证码"),
+    SMS_CODE_INVALID(20002, "验证码错误"),
+    SMS_CODE_EXPIRED(20003, "验证码已过期，请重新获取"),
 
     SYSTEM_ERROR(40000, "系统繁忙，请稍后再试"),
     PARAM_ERROR(40001, "请求参数错误"),
