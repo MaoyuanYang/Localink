@@ -155,6 +155,7 @@
                     <target>${java.version}</target>
                     <encoding>${project.build.sourceEncoding}</encoding>
                     <proc>full</proc>
+                    <parameters>true</parameters>
                 </configuration>
             </plugin>
         </plugins>
