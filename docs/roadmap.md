@@ -14,7 +14,7 @@
 ## M1 基础业务闭环（单库）
 - [x] M1.1 数据库设计文档：ER 图 + 12 张表字段说明（`docs/database.md`）—— 2026-08-15
 - [x] M1.2 单库建表 SQL + HikariCP + MyBatis-Plus 接入 —— 2026-08-15
-- [ ] M1.3 发送短信验证码（Redis 存验证码 + TTL）
+- [x] M1.3 发送短信验证码（Redis 存验证码 + TTL）—— 2026-08-16
 - [ ] M1.4 登录/注册（UUID token + Redis Hash 会话）
 - [ ] M1.5 双拦截器鉴权（token 刷新 + 登录校验）+ UserHolder
 - [ ] M1.6 商户类型 + 商户 CRUD
