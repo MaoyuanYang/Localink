@@ -52,9 +52,14 @@ M2 开篇：在 `localink-cache-starter` 落地 RedisCache 门面——**分组�
 | 全量构建 | `.\mvnw.cmd clean package` | BUILD SUCCESS，13 模块 |
 | cache-starter 测试 | 同上 | **27/27 通过**（String×8 / Hash×5 / Set×3 / ZSet×8 / 通用×2 / 装配×1） |
 | server 测试 | 同上 | **54/54 通过**（原 53 + 新增 CacheAutoConfigSmokeTest×1） |
-| 启动冒烟 | `java -jar localink-server-0.0.1-SNAPSHOT.jar` + `GET /ping` | 返回 pong，starter 引入不破坏应用 |
+| 启动冒烟 | `powershell -File scripts/smoke.ps1` | PING-OK: pong + CLEANUP-OK（进程树已杀、8086 释放） |
 
-**排障记录**：冒烟后 `Stop-Process` 未杀掉后台 java 进程（进程残留占用），手动 `Stop-Process -Id <pid> -Force` 清理并确认 8086 端口释放。教训：冒烟脚本的进程清理需验证生效，后续冒烟沿用"启动→探活→杀进程→确认端口释放"四步。
+**排障记录（冒烟进程残留，两次）**：
+- **现象**：冒烟后 java 进程残留占用 8086；取证实验时再次复现
+- **根因（Win32_Process 取证确认）**：PATH 中的 `java` 是 Oracle javapath shim（`C:\Program Files\Common Files\Oracle\Java\javapath\java.exe`），它会以**子进程**拉起真实 JVM（`C:\Program Files\Java\jdk-21\bin\java.exe`，取证：shim PID 43124 → 子进程 PID 37384）。`Start-Process -PassThru` 拿到的是 shim 的 PID，`Stop-Process` 只杀了 shim，JVM 子进程成孤儿继续占用 8086
+- **放大因素**：当时 Stop-Process 加了 `-ErrorAction SilentlyContinue` 吞掉信号，且未做清理后验证；又是临场一次性命令，偏离了 M1.8 已固化的"脚本化冒烟"做法
+- **责任归属**：执行侧（AI）责任——未验证进程树、吞错误、无清理验证；javapath shim 是 Oracle 正常配置，不是环境问题
+- **防再发**：落地 `scripts/smoke.ps1`（启动→30s 探活→`taskkill /F /T` 杀整棵进程树→双重验证"无 shim/子进程残留 + 8086 释放"，失败非零退出）。后续迭代冒烟一律走该脚本，禁止一次性命令
 
 ## 5. 学习清单
 
