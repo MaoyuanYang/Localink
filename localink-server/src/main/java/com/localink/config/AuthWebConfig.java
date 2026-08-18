@@ -20,8 +20,8 @@ public class AuthWebConfig implements WebMvcConfigurer {
                 .addPathPatterns("/api/**")
                 .order(0);
         registry.addInterceptor(loginInterceptor)
-                .addPathPatterns("/api/user/**")
-                .excludePathPatterns("/api/user/login")
+                .addPathPatterns("/api/**")
+                .excludePathPatterns("/api/user/login", "/api/sms/**")
                 .order(1);
     }
 }
