@@ -16,7 +16,7 @@
 - [x] M1.2 单库建表 SQL + HikariCP + MyBatis-Plus 接入 —— 2026-08-15
 - [x] M1.3 发送短信验证码（Redis 存验证码 + TTL）—— 2026-08-16
 - [x] M1.4 登录/注册（UUID token + Redis Hash 会话）—— 2026-08-16
-- [ ] M1.5 双拦截器鉴权（token 刷新 + 登录校验）+ UserHolder
+- [x] M1.5 双拦截器鉴权（token 刷新 + 登录校验）+ UserHolder —— 2026-08-17
 - [ ] M1.6 商户类型 + 商户 CRUD
 - [ ] M1.7 普通优惠券 CRUD
 - [ ] M1.8 秒杀券 CRUD（库存 + 开始/结束时间）
