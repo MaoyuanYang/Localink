@@ -85,7 +85,7 @@ Localink 采用**单体应用 + 框架组件化**架构：一个可启动的业�
 | Redis Key | 统一前缀 `lk:`（环境可配），经 KeyManage 枚举 + KeyBuild 生成；集群场景用 `{voucherId}` hash tag 保证同槽位 |
 | Kafka Topic | 统一前缀 `lk-`（配置项 `localink.topic.prefix`），如 `lk-seckill-order`；DLQ 为 `{topic}.DLQ` |
 | 锁命名 | `lk-lock:{类型前缀}:{业务名}:{SpEL解析key}` |
-| 错误码 | 分段：0 成功；1xxxx 秒杀券；2xxxx 用户；3xxxx 社区；4xxxx 框架；5xxxx 商户 |
+| 错误码 | 分段：0 成功；1xxxx 券域（普通/秒杀）；2xxxx 用户；3xxxx 社区；4xxxx 框架；5xxxx 商户 |
 | 幂等键 | MQ 消息 UUID + 业务唯一键（userId+voucherId）双重保障 |
 | 时间 | 统一 `LocalDateTime`，Jackson 格式化 `yyyy-MM-dd HH:mm:ss` |
 | 序列化 | Redis 全部 String 序列化，对象值用 fastjson2 转 JSON |
