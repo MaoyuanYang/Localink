@@ -22,7 +22,7 @@
 - [x] M1.8 秒杀券 CRUD（库存 + 开始/结束时间）—— 2026-08-18
 
 ## M2 缓存体系（按问题演进）
-- [ ] M2.1 Redis 工具框架①：RedisCache 封装（String/Hash/Set/ZSet）
+- [x] M2.1 Redis 工具框架①：RedisCache 封装（String/Hash/Set/ZSet）—— 2026-08-28
 - [ ] M2.2 Redis 工具框架②：Key 治理（KeyManage 枚举 + KeyBuild 前缀规范）
 - [ ] M2.3 商户缓存 V1：旁路缓存（先更库再删缓存）
 - [ ] M2.4 缓存穿透：空值缓存
