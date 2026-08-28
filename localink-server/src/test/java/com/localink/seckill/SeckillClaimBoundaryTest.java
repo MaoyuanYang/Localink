@@ -3,10 +3,11 @@ package com.localink.seckill;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.localink.api.dto.SeckillVoucherDTO;
 import com.localink.api.dto.UserDTO;
+import com.localink.cache.KeyBuilder;
+import com.localink.cache.RedisCache;
 import com.localink.common.code.BaseCode;
 import com.localink.common.exception.LocalinkException;
-import com.localink.constant.SmsConstants;
-import com.localink.constant.UserConstants;
+import com.localink.constant.KeyManage;
 import com.localink.entity.SeckillVoucher;
 import com.localink.entity.User;
 import com.localink.framework.holder.UserHolder;
@@ -22,7 +23,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -58,7 +58,10 @@ class SeckillClaimBoundaryTest {
     private UserMapper userMapper;
 
     @Autowired
-    private StringRedisTemplate stringRedisTemplate;
+    private RedisCache redisCache;
+
+    @Autowired
+    private KeyBuilder keyBuilder;
 
     private final List<Long> createdVoucherIds = new ArrayList<>();
     private final List<String> issuedTokens = new ArrayList<>();
@@ -66,7 +69,7 @@ class SeckillClaimBoundaryTest {
     @BeforeEach
     void loginAndSetHolder() {
         smsService.sendCode(PHONE);
-        String code = stringRedisTemplate.opsForValue().get(SmsConstants.CODE_KEY_PREFIX + PHONE);
+        String code = redisCache.strings().getString(keyBuilder.build(KeyManage.SMS_CODE, PHONE));
         String token = userService.login(PHONE, code);
         issuedTokens.add(token);
         User user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getPhone, PHONE));
@@ -79,8 +82,8 @@ class SeckillClaimBoundaryTest {
     @AfterEach
     void cleanup() {
         UserHolder.clear();
-        stringRedisTemplate.delete(SmsConstants.CODE_KEY_PREFIX + PHONE);
-        issuedTokens.forEach(token -> stringRedisTemplate.delete(UserConstants.TOKEN_KEY_PREFIX + token));
+        redisCache.delete(keyBuilder.build(KeyManage.SMS_CODE, PHONE));
+        issuedTokens.forEach(token -> redisCache.delete(keyBuilder.build(KeyManage.USER_TOKEN, token)));
         createdVoucherIds.forEach(id -> {
             seckillVoucherMapper.delete(new LambdaQueryWrapper<SeckillVoucher>().eq(SeckillVoucher::getVoucherId, id));
             voucherMapper.deleteById(id);

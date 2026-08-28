@@ -1,18 +1,18 @@
 package com.localink.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.localink.cache.KeyBuilder;
+import com.localink.cache.RedisCache;
 import com.localink.common.code.BaseCode;
 import com.localink.common.exception.LocalinkException;
-import com.localink.constant.SmsConstants;
+import com.localink.constant.KeyManage;
 import com.localink.constant.UserConstants;
 import com.localink.entity.User;
 import com.localink.mapper.UserMapper;
 import com.localink.service.UserService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
-import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -22,12 +22,13 @@ import java.util.UUID;
 public class UserServiceImpl implements UserService {
 
     private final UserMapper userMapper;
-    private final StringRedisTemplate stringRedisTemplate;
+    private final RedisCache redisCache;
+    private final KeyBuilder keyBuilder;
 
     @Override
     public String login(String phone, String code) {
-        String cachedCode = stringRedisTemplate.opsForValue()
-                .getAndDelete(SmsConstants.CODE_KEY_PREFIX + phone);
+        String cachedCode = redisCache.strings()
+                .getAndDelete(keyBuilder.build(KeyManage.SMS_CODE, phone));
         if (cachedCode == null) {
             throw new LocalinkException(BaseCode.SMS_CODE_EXPIRED);
         }
@@ -61,8 +62,6 @@ public class UserServiceImpl implements UserService {
         fields.put(UserConstants.FIELD_NICK_NAME, user.getNickName());
         fields.put(UserConstants.FIELD_ICON, user.getIcon());
         fields.put(UserConstants.FIELD_LEVEL, String.valueOf(user.getLevel()));
-        String key = UserConstants.TOKEN_KEY_PREFIX + token;
-        stringRedisTemplate.opsForHash().putAll(key, fields);
-        stringRedisTemplate.expire(key, Duration.ofSeconds(UserConstants.SESSION_TTL_SECONDS));
+        redisCache.hashes().putAll(keyBuilder.build(KeyManage.USER_TOKEN, token), fields, KeyManage.USER_TOKEN.getTtl());
     }
 }
