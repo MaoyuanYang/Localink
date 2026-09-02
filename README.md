@@ -76,4 +76,4 @@ curl http://localhost:8086/ping   # -> pong
 
 ## 开发状态
 
-M0 工程奠基与 M1 基础业务闭环（单库）已全部完成（2026-08-18），M2 缓存体系进行中（M2.1 已完成，当前待办 M2.2 Key 治理）。完整进度见 [docs/roadmap.md](docs/roadmap.md)。
+M0 工程奠基与 M1 基础业务闭环（单库）已全部完成（2026-08-18），M2 缓存体系进行中（M2.1、M2.2 已完成，当前待办 M2.3 商户缓存 V1）。完整进度见 [docs/roadmap.md](docs/roadmap.md)。

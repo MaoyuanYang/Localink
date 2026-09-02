@@ -23,7 +23,7 @@
 
 ## M2 缓存体系（按问题演进）
 - [x] M2.1 Redis 工具框架①：RedisCache 封装（String/Hash/Set/ZSet）—— 2026-08-28
-- [ ] M2.2 Redis 工具框架②：Key 治理（KeyManage 枚举 + KeyBuild 前缀规范）
+- [x] M2.2 Redis 工具框架②：Key 治理（KeyManage 枚举 + KeyBuild 前缀规范）—— 2026-09-02
 - [ ] M2.3 商户缓存 V1：旁路缓存（先更库再删缓存）
 - [ ] M2.4 缓存穿透：空值缓存
 - [ ] M2.5 缓存雪崩：TTL 随机抖动
