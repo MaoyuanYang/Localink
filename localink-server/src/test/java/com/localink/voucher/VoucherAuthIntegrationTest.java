@@ -1,9 +1,10 @@
 package com.localink.voucher;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.localink.cache.KeyBuilder;
+import com.localink.cache.RedisCache;
 import com.localink.common.code.BaseCode;
-import com.localink.constant.SmsConstants;
-import com.localink.constant.UserConstants;
+import com.localink.constant.KeyManage;
 import com.localink.entity.User;
 import com.localink.framework.auth.TokenRefreshInterceptor;
 import com.localink.framework.holder.UserHolder;
@@ -15,7 +16,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -46,21 +46,24 @@ class VoucherAuthIntegrationTest {
     private UserMapper userMapper;
 
     @Autowired
-    private StringRedisTemplate stringRedisTemplate;
+    private RedisCache redisCache;
+
+    @Autowired
+    private KeyBuilder keyBuilder;
 
     private final List<String> issuedTokens = new ArrayList<>();
 
     @AfterEach
     void cleanup() {
-        stringRedisTemplate.delete(SmsConstants.CODE_KEY_PREFIX + PHONE);
-        issuedTokens.forEach(token -> stringRedisTemplate.delete(UserConstants.TOKEN_KEY_PREFIX + token));
+        redisCache.delete(keyBuilder.build(KeyManage.SMS_CODE, PHONE));
+        issuedTokens.forEach(token -> redisCache.delete(keyBuilder.build(KeyManage.USER_TOKEN, token)));
         userMapper.delete(new LambdaQueryWrapper<User>().eq(User::getPhone, PHONE));
         UserHolder.clear();
     }
 
     private String loginAndGetToken() {
         smsService.sendCode(PHONE);
-        String code = stringRedisTemplate.opsForValue().get(SmsConstants.CODE_KEY_PREFIX + PHONE);
+        String code = redisCache.strings().getString(keyBuilder.build(KeyManage.SMS_CODE, PHONE));
         String token = userService.login(PHONE, code);
         issuedTokens.add(token);
         return token;

@@ -1,14 +1,16 @@
 package com.localink.sms;
 
+import com.localink.cache.KeyBuild;
+import com.localink.cache.KeyBuilder;
+import com.localink.cache.RedisCache;
 import com.localink.common.code.BaseCode;
 import com.localink.common.exception.LocalinkException;
-import com.localink.constant.SmsConstants;
+import com.localink.constant.KeyManage;
 import com.localink.service.SmsService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.data.redis.core.StringRedisTemplate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -19,31 +21,33 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class SmsCodeIntegrationTest {
 
     private static final String PHONE = "13800138000";
-    private static final String KEY = SmsConstants.CODE_KEY_PREFIX + PHONE;
 
     @Autowired
     private SmsService smsService;
 
     @Autowired
-    private StringRedisTemplate stringRedisTemplate;
+    private RedisCache redisCache;
+
+    @Autowired
+    private KeyBuilder keyBuilder;
 
     @AfterEach
     void cleanup() {
-        stringRedisTemplate.delete(KEY);
+        redisCache.delete(smsCodeKey());
     }
 
     @Test
     void sendCodeStoresSixDigitsWithTtl() {
         smsService.sendCode(PHONE);
 
-        String code = stringRedisTemplate.opsForValue().get(KEY);
+        String code = redisCache.strings().getString(smsCodeKey());
         assertNotNull(code);
-        assertEquals(SmsConstants.CODE_LENGTH, code.length());
+        assertEquals(6, code.length());
         assertTrue(code.chars().allMatch(Character::isDigit));
 
-        Long ttl = stringRedisTemplate.getExpire(KEY);
+        Long ttl = redisCache.getExpire(smsCodeKey());
         assertNotNull(ttl);
-        assertTrue(ttl > 0 && ttl <= SmsConstants.CODE_TTL_SECONDS);
+        assertTrue(ttl > 0 && ttl <= KeyManage.SMS_CODE.getTtl().toSeconds());
     }
 
     @Test
@@ -52,5 +56,9 @@ class SmsCodeIntegrationTest {
 
         LocalinkException ex = assertThrows(LocalinkException.class, () -> smsService.sendCode(PHONE));
         assertEquals(BaseCode.SMS_SEND_TOO_FREQUENT.getCode(), ex.getCode());
+    }
+
+    private KeyBuild smsCodeKey() {
+        return keyBuilder.build(KeyManage.SMS_CODE, PHONE);
     }
 }

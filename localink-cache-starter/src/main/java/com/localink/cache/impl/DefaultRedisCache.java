@@ -1,5 +1,6 @@
 package com.localink.cache.impl;
 
+import com.localink.cache.KeyBuild;
 import com.localink.cache.RedisCache;
 import com.localink.cache.RedisHashOps;
 import com.localink.cache.RedisSetOps;
@@ -9,6 +10,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.time.Duration;
 import java.util.Collection;
+import java.util.List;
 
 /**
  * 基于 StringRedisTemplate 的 RedisCache 默认实现。
@@ -30,31 +32,32 @@ public class DefaultRedisCache implements RedisCache {
     }
 
     @Override
-    public boolean hasKey(String key) {
-        return Boolean.TRUE.equals(redisTemplate.hasKey(key));
+    public boolean hasKey(KeyBuild key) {
+        return Boolean.TRUE.equals(redisTemplate.hasKey(key.getKey()));
     }
 
     @Override
-    public void delete(String key) {
-        redisTemplate.delete(key);
+    public void delete(KeyBuild key) {
+        redisTemplate.delete(key.getKey());
     }
 
     @Override
-    public void delete(Collection<String> keys) {
+    public void delete(Collection<KeyBuild> keys) {
         if (keys == null || keys.isEmpty()) {
             return;
         }
-        redisTemplate.delete(keys);
+        List<String> rawKeys = keys.stream().map(KeyBuild::getKey).toList();
+        redisTemplate.delete(rawKeys);
     }
 
     @Override
-    public boolean expire(String key, Duration ttl) {
-        return Boolean.TRUE.equals(redisTemplate.expire(key, ttl));
+    public boolean expire(KeyBuild key, Duration ttl) {
+        return Boolean.TRUE.equals(redisTemplate.expire(key.getKey(), ttl));
     }
 
     @Override
-    public Long getExpire(String key) {
-        return redisTemplate.getExpire(key);
+    public Long getExpire(KeyBuild key) {
+        return redisTemplate.getExpire(key.getKey());
     }
 
     @Override

@@ -1,16 +1,18 @@
 package com.localink.framework.auth;
 
 import com.localink.api.dto.UserDTO;
+import com.localink.cache.KeyBuild;
+import com.localink.cache.KeyBuilder;
+import com.localink.cache.RedisCache;
+import com.localink.constant.KeyManage;
 import com.localink.constant.UserConstants;
 import com.localink.framework.holder.UserHolder;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
-import java.time.Duration;
 import java.util.Map;
 
 @Component
@@ -19,7 +21,8 @@ public class TokenRefreshInterceptor implements HandlerInterceptor {
 
     public static final String AUTH_HEADER = "Authorization";
 
-    private final StringRedisTemplate stringRedisTemplate;
+    private final RedisCache redisCache;
+    private final KeyBuilder keyBuilder;
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
@@ -27,13 +30,13 @@ public class TokenRefreshInterceptor implements HandlerInterceptor {
         if (token == null || token.isBlank()) {
             return true;
         }
-        String key = UserConstants.TOKEN_KEY_PREFIX + token;
-        Map<Object, Object> fields = stringRedisTemplate.opsForHash().entries(key);
+        KeyBuild key = keyBuilder.build(KeyManage.USER_TOKEN, token);
+        Map<String, String> fields = redisCache.hashes().entries(key);
         if (fields.isEmpty()) {
             return true;
         }
         UserHolder.set(toUserDTO(fields));
-        stringRedisTemplate.expire(key, Duration.ofSeconds(UserConstants.SESSION_TTL_SECONDS));
+        redisCache.expire(key, KeyManage.USER_TOKEN.getTtl());
         return true;
     }
 
@@ -42,13 +45,13 @@ public class TokenRefreshInterceptor implements HandlerInterceptor {
         UserHolder.clear();
     }
 
-    private UserDTO toUserDTO(Map<Object, Object> fields) {
+    private UserDTO toUserDTO(Map<String, String> fields) {
         UserDTO user = new UserDTO();
-        user.setId(Long.valueOf((String) fields.get(UserConstants.FIELD_ID)));
-        user.setPhone((String) fields.get(UserConstants.FIELD_PHONE));
-        user.setNickName((String) fields.get(UserConstants.FIELD_NICK_NAME));
-        user.setIcon((String) fields.get(UserConstants.FIELD_ICON));
-        user.setLevel(Integer.valueOf((String) fields.get(UserConstants.FIELD_LEVEL)));
+        user.setId(Long.valueOf(fields.get(UserConstants.FIELD_ID)));
+        user.setPhone(fields.get(UserConstants.FIELD_PHONE));
+        user.setNickName(fields.get(UserConstants.FIELD_NICK_NAME));
+        user.setIcon(fields.get(UserConstants.FIELD_ICON));
+        user.setLevel(Integer.valueOf(fields.get(UserConstants.FIELD_LEVEL)));
         return user;
     }
 }

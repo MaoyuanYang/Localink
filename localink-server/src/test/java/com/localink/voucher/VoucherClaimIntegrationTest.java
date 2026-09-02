@@ -3,10 +3,11 @@ package com.localink.voucher;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.localink.api.dto.UserDTO;
 import com.localink.api.dto.VoucherDTO;
+import com.localink.cache.KeyBuilder;
+import com.localink.cache.RedisCache;
 import com.localink.common.code.BaseCode;
 import com.localink.common.exception.LocalinkException;
-import com.localink.constant.SmsConstants;
-import com.localink.constant.UserConstants;
+import com.localink.constant.KeyManage;
 import com.localink.entity.User;
 import com.localink.entity.Voucher;
 import com.localink.entity.VoucherOrder;
@@ -22,7 +23,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -54,7 +54,10 @@ class VoucherClaimIntegrationTest {
     private UserMapper userMapper;
 
     @Autowired
-    private StringRedisTemplate stringRedisTemplate;
+    private RedisCache redisCache;
+
+    @Autowired
+    private KeyBuilder keyBuilder;
 
     private final List<Long> createdVoucherIds = new ArrayList<>();
     private final List<String> issuedTokens = new ArrayList<>();
@@ -63,7 +66,7 @@ class VoucherClaimIntegrationTest {
     @BeforeEach
     void loginAndSetHolder() {
         smsService.sendCode(PHONE);
-        String code = stringRedisTemplate.opsForValue().get(SmsConstants.CODE_KEY_PREFIX + PHONE);
+        String code = redisCache.strings().getString(keyBuilder.build(KeyManage.SMS_CODE, PHONE));
         String token = userService.login(PHONE, code);
         issuedTokens.add(token);
         User user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getPhone, PHONE));
@@ -77,8 +80,8 @@ class VoucherClaimIntegrationTest {
     @AfterEach
     void cleanup() {
         UserHolder.clear();
-        stringRedisTemplate.delete(SmsConstants.CODE_KEY_PREFIX + PHONE);
-        issuedTokens.forEach(token -> stringRedisTemplate.delete(UserConstants.TOKEN_KEY_PREFIX + token));
+        redisCache.delete(keyBuilder.build(KeyManage.SMS_CODE, PHONE));
+        issuedTokens.forEach(token -> redisCache.delete(keyBuilder.build(KeyManage.USER_TOKEN, token)));
         createdVoucherIds.forEach(voucherId ->
                 voucherOrderMapper.delete(new LambdaQueryWrapper<VoucherOrder>().eq(VoucherOrder::getVoucherId, voucherId)));
         createdVoucherIds.forEach(voucherMapper::deleteById);

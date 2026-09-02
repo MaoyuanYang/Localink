@@ -1,5 +1,6 @@
 package com.localink.cache.impl;
 
+import com.localink.cache.KeyBuild;
 import com.localink.cache.RedisZSetOps;
 import com.localink.cache.json.RedisJsonCodec;
 import com.localink.cache.model.ZSetEntry;
@@ -20,60 +21,60 @@ public class DefaultRedisZSetOps implements RedisZSetOps {
     private final StringRedisTemplate redisTemplate;
 
     @Override
-    public boolean add(String key, Object value, double score) {
-        return Boolean.TRUE.equals(redisTemplate.opsForZSet().add(key, RedisJsonCodec.serialize(value), score));
+    public boolean add(KeyBuild key, Object value, double score) {
+        return Boolean.TRUE.equals(redisTemplate.opsForZSet().add(key.getKey(), RedisJsonCodec.serialize(value), score));
     }
 
     @Override
-    public boolean add(String key, Object value, double score, Duration ttl) {
+    public boolean add(KeyBuild key, Object value, double score, Duration ttl) {
         boolean added = add(key, value, score);
-        redisTemplate.expire(key, ttl);
+        redisTemplate.expire(key.getKey(), ttl);
         return added;
     }
 
     @Override
-    public Double incrementScore(String key, Object value, double delta) {
-        return redisTemplate.opsForZSet().incrementScore(key, RedisJsonCodec.serialize(value), delta);
+    public Double incrementScore(KeyBuild key, Object value, double delta) {
+        return redisTemplate.opsForZSet().incrementScore(key.getKey(), RedisJsonCodec.serialize(value), delta);
     }
 
     @Override
-    public Long remove(String key, Object... values) {
-        return redisTemplate.opsForZSet().remove(key, (Object[]) serializeAll(values));
+    public Long remove(KeyBuild key, Object... values) {
+        return redisTemplate.opsForZSet().remove(key.getKey(), (Object[]) serializeAll(values));
     }
 
     @Override
-    public Long size(String key) {
-        return redisTemplate.opsForZSet().zCard(key);
+    public Long size(KeyBuild key) {
+        return redisTemplate.opsForZSet().zCard(key.getKey());
     }
 
     @Override
-    public Long rank(String key, Object value) {
-        return redisTemplate.opsForZSet().rank(key, RedisJsonCodec.serialize(value));
+    public Long rank(KeyBuild key, Object value) {
+        return redisTemplate.opsForZSet().rank(key.getKey(), RedisJsonCodec.serialize(value));
     }
 
     @Override
-    public Long reverseRank(String key, Object value) {
-        return redisTemplate.opsForZSet().reverseRank(key, RedisJsonCodec.serialize(value));
+    public Long reverseRank(KeyBuild key, Object value) {
+        return redisTemplate.opsForZSet().reverseRank(key.getKey(), RedisJsonCodec.serialize(value));
     }
 
     @Override
-    public Double score(String key, Object value) {
-        return redisTemplate.opsForZSet().score(key, RedisJsonCodec.serialize(value));
+    public Double score(KeyBuild key, Object value) {
+        return redisTemplate.opsForZSet().score(key.getKey(), RedisJsonCodec.serialize(value));
     }
 
     @Override
-    public <T> Set<T> range(String key, long start, long end, Class<T> type) {
-        return convert(redisTemplate.opsForZSet().range(key, start, end), type);
+    public <T> Set<T> range(KeyBuild key, long start, long end, Class<T> type) {
+        return convert(redisTemplate.opsForZSet().range(key.getKey(), start, end), type);
     }
 
     @Override
-    public <T> Set<T> reverseRange(String key, long start, long end, Class<T> type) {
-        return convert(redisTemplate.opsForZSet().reverseRange(key, start, end), type);
+    public <T> Set<T> reverseRange(KeyBuild key, long start, long end, Class<T> type) {
+        return convert(redisTemplate.opsForZSet().reverseRange(key.getKey(), start, end), type);
     }
 
     @Override
-    public <T> Set<ZSetEntry<T>> reverseRangeWithScore(String key, long start, long end, Class<T> type) {
-        Set<ZSetOperations.TypedTuple<String>> tuples = redisTemplate.opsForZSet().reverseRangeWithScores(key, start, end);
+    public <T> Set<ZSetEntry<T>> reverseRangeWithScore(KeyBuild key, long start, long end, Class<T> type) {
+        Set<ZSetOperations.TypedTuple<String>> tuples = redisTemplate.opsForZSet().reverseRangeWithScores(key.getKey(), start, end);
         if (tuples == null) {
             return Set.of();
         }
@@ -86,8 +87,8 @@ public class DefaultRedisZSetOps implements RedisZSetOps {
     }
 
     @Override
-    public <T> Set<T> reverseRangeByScore(String key, double min, double max, long offset, long count, Class<T> type) {
-        return convert(redisTemplate.opsForZSet().reverseRangeByScore(key, min, max, offset, count), type);
+    public <T> Set<T> reverseRangeByScore(KeyBuild key, double min, double max, long offset, long count, Class<T> type) {
+        return convert(redisTemplate.opsForZSet().reverseRangeByScore(key.getKey(), min, max, offset, count), type);
     }
 
     private String[] serializeAll(Object... values) {

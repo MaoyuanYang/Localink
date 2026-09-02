@@ -1,5 +1,6 @@
 package com.localink.cache.impl;
 
+import com.localink.cache.KeyBuild;
 import com.localink.cache.RedisHashOps;
 import com.localink.cache.json.RedisJsonCodec;
 import lombok.RequiredArgsConstructor;
@@ -18,48 +19,48 @@ public class DefaultRedisHashOps implements RedisHashOps {
     private final StringRedisTemplate redisTemplate;
 
     @Override
-    public void put(String key, String field, Object value) {
-        redisTemplate.opsForHash().put(key, field, RedisJsonCodec.serialize(value));
+    public void put(KeyBuild key, String field, Object value) {
+        redisTemplate.opsForHash().put(key.getKey(), field, RedisJsonCodec.serialize(value));
     }
 
     @Override
-    public void putAll(String key, Map<String, ?> map) {
-        redisTemplate.opsForHash().putAll(key, serializeMap(map));
+    public void putAll(KeyBuild key, Map<String, ?> map) {
+        redisTemplate.opsForHash().putAll(key.getKey(), serializeMap(map));
     }
 
     @Override
-    public void putAll(String key, Map<String, ?> map, Duration ttl) {
+    public void putAll(KeyBuild key, Map<String, ?> map, Duration ttl) {
         putAll(key, map);
-        redisTemplate.expire(key, ttl);
+        redisTemplate.expire(key.getKey(), ttl);
     }
 
     @Override
-    public <T> T get(String key, String field, Class<T> type) {
-        Object raw = redisTemplate.opsForHash().get(key, field);
+    public <T> T get(KeyBuild key, String field, Class<T> type) {
+        Object raw = redisTemplate.opsForHash().get(key.getKey(), field);
         return RedisJsonCodec.deserialize(raw == null ? null : raw.toString(), type);
     }
 
     @Override
-    public Map<String, String> entries(String key) {
-        Map<Object, Object> raw = redisTemplate.opsForHash().entries(key);
+    public Map<String, String> entries(KeyBuild key) {
+        Map<Object, Object> raw = redisTemplate.opsForHash().entries(key.getKey());
         Map<String, String> result = new HashMap<>(raw.size());
         raw.forEach((field, value) -> result.put(field.toString(), value == null ? null : value.toString()));
         return result;
     }
 
     @Override
-    public boolean hasField(String key, String field) {
-        return Boolean.TRUE.equals(redisTemplate.opsForHash().hasKey(key, field));
+    public boolean hasField(KeyBuild key, String field) {
+        return Boolean.TRUE.equals(redisTemplate.opsForHash().hasKey(key.getKey(), field));
     }
 
     @Override
-    public Long delete(String key, String... fields) {
-        return redisTemplate.opsForHash().delete(key, (Object[]) fields);
+    public Long delete(KeyBuild key, String... fields) {
+        return redisTemplate.opsForHash().delete(key.getKey(), (Object[]) fields);
     }
 
     @Override
-    public Long increment(String key, String field, long delta) {
-        return redisTemplate.opsForHash().increment(key, field, delta);
+    public Long increment(KeyBuild key, String field, long delta) {
+        return redisTemplate.opsForHash().increment(key.getKey(), field, delta);
     }
 
     private Map<String, String> serializeMap(Map<String, ?> map) {

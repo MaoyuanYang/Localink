@@ -1,5 +1,6 @@
 package com.localink.cache.impl;
 
+import com.localink.cache.KeyBuild;
 import com.localink.cache.RedisSetOps;
 import com.localink.cache.json.RedisJsonCodec;
 import lombok.RequiredArgsConstructor;
@@ -17,33 +18,33 @@ public class DefaultRedisSetOps implements RedisSetOps {
     private final StringRedisTemplate redisTemplate;
 
     @Override
-    public Long add(String key, Object... values) {
-        return redisTemplate.opsForSet().add(key, serializeAll(values));
+    public Long add(KeyBuild key, Object... values) {
+        return redisTemplate.opsForSet().add(key.getKey(), serializeAll(values));
     }
 
     @Override
-    public Long remove(String key, Object... values) {
-        return redisTemplate.opsForSet().remove(key, (Object[]) serializeAll(values));
+    public Long remove(KeyBuild key, Object... values) {
+        return redisTemplate.opsForSet().remove(key.getKey(), (Object[]) serializeAll(values));
     }
 
     @Override
-    public boolean isMember(String key, Object value) {
-        return Boolean.TRUE.equals(redisTemplate.opsForSet().isMember(key, RedisJsonCodec.serialize(value)));
+    public boolean isMember(KeyBuild key, Object value) {
+        return Boolean.TRUE.equals(redisTemplate.opsForSet().isMember(key.getKey(), RedisJsonCodec.serialize(value)));
     }
 
     @Override
-    public <T> Set<T> members(String key, Class<T> type) {
-        return convert(redisTemplate.opsForSet().members(key), type);
+    public <T> Set<T> members(KeyBuild key, Class<T> type) {
+        return convert(redisTemplate.opsForSet().members(key.getKey()), type);
     }
 
     @Override
-    public <T> Set<T> intersect(String key, String otherKey, Class<T> type) {
-        return convert(redisTemplate.opsForSet().intersect(key, otherKey), type);
+    public <T> Set<T> intersect(KeyBuild key, KeyBuild otherKey, Class<T> type) {
+        return convert(redisTemplate.opsForSet().intersect(key.getKey(), otherKey.getKey()), type);
     }
 
     @Override
-    public Long size(String key) {
-        return redisTemplate.opsForSet().size(key);
+    public Long size(KeyBuild key) {
+        return redisTemplate.opsForSet().size(key.getKey());
     }
 
     private String[] serializeAll(Object... values) {
