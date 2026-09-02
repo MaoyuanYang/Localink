@@ -1,0 +1,132 @@
+package com.localink.shop;
+
+import com.localink.api.dto.ShopDTO;
+import com.localink.api.vo.ShopVO;
+import com.localink.cache.KeyBuild;
+import com.localink.cache.KeyBuilder;
+import com.localink.cache.RedisCache;
+import com.localink.common.code.BaseCode;
+import com.localink.common.exception.LocalinkException;
+import com.localink.constant.KeyManage;
+import com.localink.entity.Shop;
+import com.localink.mapper.ShopMapper;
+import com.localink.service.ShopService;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+@SpringBootTest
+class ShopCacheIntegrationTest {
+
+    @Autowired
+    private ShopService shopService;
+
+    @Autowired
+    private ShopMapper shopMapper;
+
+    @Autowired
+    private RedisCache redisCache;
+
+    @Autowired
+    private KeyBuilder keyBuilder;
+
+    private final List<Long> createdIds = new ArrayList<>();
+
+    @AfterEach
+    void cleanup() {
+        createdIds.forEach(id -> {
+            shopMapper.deleteById(id);
+            redisCache.delete(shopKey(id));
+        });
+    }
+
+    private ShopDTO newDto() {
+        ShopDTO dto = new ShopDTO();
+        dto.setName("缓存测试商户-" + System.nanoTime());
+        dto.setTypeId(10L);
+        dto.setImages("/images/test-1.jpg");
+        dto.setArea("测试商圈");
+        dto.setAddress("测试地址1号");
+        dto.setLongitude(120.123456);
+        dto.setLatitude(30.123456);
+        dto.setAvgPrice(9900L);
+        dto.setOpenHours("09:00-21:00");
+        return dto;
+    }
+
+    private KeyBuild shopKey(Long id) {
+        return keyBuilder.build(KeyManage.SHOP_INFO, id);
+    }
+
+    @Test
+    void detailMissFillsCacheWithTtl() {
+        Long id = Long.valueOf(shopService.create(newDto()));
+        createdIds.add(id);
+        assertFalse(redisCache.hasKey(shopKey(id)));
+
+        ShopVO vo = shopService.detail(id);
+
+        assertTrue(redisCache.hasKey(shopKey(id)));
+        Long expire = redisCache.getExpire(shopKey(id));
+        assertTrue(expire > 0 && expire <= 1800);
+        ShopVO cached = redisCache.strings().get(shopKey(id), ShopVO.class);
+        assertEquals(vo.getName(), cached.getName());
+        assertEquals(vo.getId(), cached.getId());
+    }
+
+    @Test
+    void detailHitsCacheUntilUpdateInvalidatesIt() {
+        Long id = Long.valueOf(shopService.create(newDto()));
+        createdIds.add(id);
+        String originalName = shopService.detail(id).getName();
+
+        Shop directUpdate = new Shop();
+        directUpdate.setId(id);
+        directUpdate.setName(originalName + "-直改库");
+        shopMapper.updateById(directUpdate);
+        assertEquals(originalName, shopService.detail(id).getName());
+
+        ShopDTO updateDto = newDto();
+        updateDto.setId(id);
+        updateDto.setName(originalName + "-service改");
+        shopService.update(updateDto);
+
+        assertFalse(redisCache.hasKey(shopKey(id)));
+        assertEquals(updateDto.getName(), shopService.detail(id).getName());
+    }
+
+    @Test
+    void detailOfMissingShopThrowsWithoutCaching() {
+        long missingId = System.nanoTime();
+
+        LocalinkException ex = assertThrows(LocalinkException.class, () -> shopService.detail(missingId));
+        assertEquals(BaseCode.NOT_FOUND.getCode(), ex.getCode());
+        assertFalse(redisCache.hasKey(shopKey(missingId)));
+    }
+
+    @Test
+    void deleteRemovesShopAndCache() {
+        Long id = Long.valueOf(shopService.create(newDto()));
+        createdIds.add(id);
+        shopService.detail(id);
+        assertTrue(redisCache.hasKey(shopKey(id)));
+
+        shopService.delete(id);
+        createdIds.remove(id);
+
+        assertNull(shopMapper.selectById(id));
+        assertFalse(redisCache.hasKey(shopKey(id)));
+        LocalinkException ex = assertThrows(LocalinkException.class, () -> shopService.detail(id));
+        assertEquals(BaseCode.NOT_FOUND.getCode(), ex.getCode());
+    }
+}

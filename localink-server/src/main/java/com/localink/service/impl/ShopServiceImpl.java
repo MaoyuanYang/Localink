@@ -4,8 +4,12 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.localink.api.dto.ShopDTO;
 import com.localink.api.vo.ShopVO;
+import com.localink.cache.KeyBuild;
+import com.localink.cache.KeyBuilder;
+import com.localink.cache.RedisCache;
 import com.localink.common.code.BaseCode;
 import com.localink.common.exception.LocalinkException;
+import com.localink.constant.KeyManage;
 import com.localink.entity.Shop;
 import com.localink.mapper.ShopMapper;
 import com.localink.service.ShopService;
@@ -13,15 +17,28 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
+
 @Service
 @RequiredArgsConstructor
 public class ShopServiceImpl implements ShopService {
 
+    private static final Duration SHOP_CACHE_TTL = Duration.ofMinutes(30);
+
     private final ShopMapper shopMapper;
+    private final RedisCache redisCache;
+    private final KeyBuilder keyBuilder;
 
     @Override
     public ShopVO detail(Long id) {
-        return toVO(requireExists(id));
+        KeyBuild key = shopKey(id);
+        ShopVO cached = redisCache.strings().get(key, ShopVO.class);
+        if (cached != null) {
+            return cached;
+        }
+        ShopVO vo = toVO(requireExists(id));
+        redisCache.strings().set(key, vo, SHOP_CACHE_TTL);
+        return vo;
     }
 
     @Override
@@ -52,12 +69,18 @@ public class ShopServiceImpl implements ShopService {
         Shop shop = new Shop();
         BeanUtils.copyProperties(dto, shop);
         shopMapper.updateById(shop);
+        redisCache.delete(shopKey(dto.getId()));
     }
 
     @Override
     public void delete(Long id) {
         requireExists(id);
         shopMapper.deleteById(id);
+        redisCache.delete(shopKey(id));
+    }
+
+    private KeyBuild shopKey(Long id) {
+        return keyBuilder.build(KeyManage.SHOP_INFO, id);
     }
 
     private Shop requireExists(Long id) {
