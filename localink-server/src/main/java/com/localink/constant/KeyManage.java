@@ -28,7 +28,13 @@ public enum KeyManage implements KeyTemplate {
      * M2.4 空值缓存复用本 key：DB 未命中写空串标记 + 2 分钟短 TTL（穿透防护）。
      * M2.5 TTL 随机抖动：正缓存 30min+[0,10min)、空值 2min+[0,30s)，批量回填错峰过期。
      */
-    SHOP_INFO("shop:info:%s", null, "商户ID→商户详情VO（String JSON，旁路缓存，TTL 由调用方显式传入；空值缓存复用本 key：空串标记+短TTL；M2.5 正/空值 TTL 均叠加随机抖动错峰过期）");
+    SHOP_INFO("shop:info:%s", null, "商户ID→商户详情VO（String JSON，旁路缓存，TTL 由调用方显式传入；空值缓存复用本 key：空串标记+短TTL；M2.5 正/空值 TTL 均叠加随机抖动错峰过期）"),
+
+    /**
+     * 商户 ID → 缓存重建互斥锁（值固定 "1"，SET NX EX 原子抢锁 + DEL 释放）。
+     * 自研简单锁：无持有者标识，业务执行超过锁 TTL 时释放会误删他人锁——留待 M3.3 Redisson 演进。
+     */
+    SHOP_REBUILD_LOCK("shop:rebuild:lock:%s", Duration.ofSeconds(10), "商户缓存重建互斥锁（SET NX EX 自研简单锁，锁超时兜底防死锁）");
 
     private final String template;
     private final Duration ttl;
