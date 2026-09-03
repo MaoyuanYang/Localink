@@ -1,5 +1,8 @@
 package com.localink.service.impl;
 
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONException;
+import com.alibaba.fastjson2.TypeReference;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.localink.api.dto.ShopDTO;
@@ -7,67 +10,107 @@ import com.localink.api.vo.ShopVO;
 import com.localink.cache.KeyBuild;
 import com.localink.cache.KeyBuilder;
 import com.localink.cache.RedisCache;
-import com.localink.cache.json.RedisJsonCodec;
 import com.localink.common.code.BaseCode;
 import com.localink.common.exception.LocalinkException;
 import com.localink.constant.KeyManage;
 import com.localink.entity.Shop;
+import com.localink.framework.cache.LogicalExpiryEntry;
 import com.localink.mapper.ShopMapper;
 import com.localink.service.ShopService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 
+import java.lang.reflect.Type;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.concurrent.ThreadLocalRandom;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ShopServiceImpl implements ShopService {
 
-    private static final Duration SHOP_CACHE_TTL = Duration.ofMinutes(30);
-    private static final Duration SHOP_CACHE_TTL_JITTER = Duration.ofMinutes(10);
+    private static final Duration SHOP_LOGICAL_TTL = Duration.ofMinutes(30);
+    private static final Duration SHOP_LOGICAL_TTL_JITTER = Duration.ofMinutes(10);
     private static final Duration SHOP_NULL_CACHE_TTL = Duration.ofMinutes(2);
     private static final Duration SHOP_NULL_TTL_JITTER = Duration.ofSeconds(30);
     private static final Duration SHOP_REBUILD_LOCK_TTL = Duration.ofSeconds(10);
     private static final int REBUILD_RETRY_LIMIT = 50;
     private static final long REBUILD_RETRY_INTERVAL_MS = 50;
+    private static final Type SHOP_ENTRY_TYPE = new TypeReference<LogicalExpiryEntry<ShopVO>>() {}.getType();
 
     private final ShopMapper shopMapper;
     private final RedisCache redisCache;
     private final KeyBuilder keyBuilder;
+    private final ThreadPoolTaskExecutor cacheRebuildExecutor;
 
     @Override
     public ShopVO detail(Long id) {
         KeyBuild key = shopKey(id);
         String raw = redisCache.strings().getString(key);
-        if (raw != null) {
-            return resolveCached(raw);
+        if (raw == null) {
+            return rebuildWithMutex(id, key);
         }
-        return rebuildWithMutex(id, key);
-    }
-
-    private ShopVO resolveCached(String raw) {
         if (raw.isEmpty()) {
             throw new LocalinkException(BaseCode.NOT_FOUND, "商户不存在");
         }
-        return RedisJsonCodec.deserialize(raw, ShopVO.class);
+        LogicalExpiryEntry<ShopVO> entry = parseEntry(raw);
+        if (entry == null || entry.getData() == null || entry.getExpireTime() == null) {
+            return rebuildWithMutex(id, key);
+        }
+        if (entry.getExpireTime().isAfter(LocalDateTime.now())) {
+            return entry.getData();
+        }
+        triggerAsyncRebuild(id, key);
+        return entry.getData();
+    }
+
+    private LogicalExpiryEntry<ShopVO> parseEntry(String raw) {
+        try {
+            return JSON.parseObject(raw, SHOP_ENTRY_TYPE);
+        } catch (JSONException e) {
+            return null;
+        }
+    }
+
+    private void triggerAsyncRebuild(Long id, KeyBuild key) {
+        KeyBuild lockKey = keyBuilder.build(KeyManage.SHOP_REBUILD_LOCK, id);
+        if (!redisCache.strings().setIfAbsent(lockKey, "1", SHOP_REBUILD_LOCK_TTL)) {
+            return;
+        }
+        cacheRebuildExecutor.execute(() -> {
+            try {
+                LogicalExpiryEntry<ShopVO> current = parseEntry(redisCache.strings().getString(key));
+                if (current != null && current.getExpireTime() != null
+                        && current.getExpireTime().isAfter(LocalDateTime.now())) {
+                    return;
+                }
+                loadAndCacheLogical(id, key);
+            } catch (Exception e) {
+                log.error("商户缓存异步重建失败, shopId={}", id, e);
+            } finally {
+                redisCache.delete(lockKey);
+            }
+        });
     }
 
     private ShopVO rebuildWithMutex(Long id, KeyBuild key) {
         KeyBuild lockKey = keyBuilder.build(KeyManage.SHOP_REBUILD_LOCK, id);
         for (int attempt = 0; attempt < REBUILD_RETRY_LIMIT; attempt++) {
-            String raw = redisCache.strings().getString(key);
-            if (raw != null) {
-                return resolveCached(raw);
+            ShopVO cached = resolveFilled(redisCache.strings().getString(key));
+            if (cached != null) {
+                return cached;
             }
             if (redisCache.strings().setIfAbsent(lockKey, "1", SHOP_REBUILD_LOCK_TTL)) {
                 try {
-                    raw = redisCache.strings().getString(key);
-                    if (raw != null) {
-                        return resolveCached(raw);
+                    cached = resolveFilled(redisCache.strings().getString(key));
+                    if (cached != null) {
+                        return cached;
                     }
-                    return loadAndCache(id, key);
+                    return loadAndCacheLogical(id, key);
                 } finally {
                     redisCache.delete(lockKey);
                 }
@@ -82,15 +125,36 @@ public class ShopServiceImpl implements ShopService {
         throw new LocalinkException(BaseCode.SYSTEM_ERROR, "缓存重建繁忙，请稍后再试");
     }
 
-    private ShopVO loadAndCache(Long id, KeyBuild key) {
+    private ShopVO resolveFilled(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        if (raw.isEmpty()) {
+            throw new LocalinkException(BaseCode.NOT_FOUND, "商户不存在");
+        }
+        LogicalExpiryEntry<ShopVO> entry = parseEntry(raw);
+        if (entry == null || entry.getData() == null) {
+            return null;
+        }
+        return entry.getData();
+    }
+
+    private ShopVO loadAndCacheLogical(Long id, KeyBuild key) {
         Shop shop = shopMapper.selectById(id);
         if (shop == null) {
             redisCache.strings().set(key, "", jittered(SHOP_NULL_CACHE_TTL, SHOP_NULL_TTL_JITTER));
             throw new LocalinkException(BaseCode.NOT_FOUND, "商户不存在");
         }
         ShopVO vo = toVO(shop);
-        redisCache.strings().set(key, vo, jittered(SHOP_CACHE_TTL, SHOP_CACHE_TTL_JITTER));
+        redisCache.strings().set(key, entryOf(vo));
         return vo;
+    }
+
+    private LogicalExpiryEntry<ShopVO> entryOf(ShopVO vo) {
+        LogicalExpiryEntry<ShopVO> entry = new LogicalExpiryEntry<>();
+        entry.setData(vo);
+        entry.setExpireTime(LocalDateTime.now().plus(jittered(SHOP_LOGICAL_TTL, SHOP_LOGICAL_TTL_JITTER)));
+        return entry;
     }
 
     @Override

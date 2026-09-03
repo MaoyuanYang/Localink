@@ -23,12 +23,12 @@ public enum KeyManage implements KeyTemplate {
     USER_TOKEN("user:token:%s", Duration.ofSeconds(1800), "token→用户会话Hash（id/phone/nickName/icon/level）"),
 
     /**
-     * 商户 ID → 商户详情 VO（String JSON，旁路缓存）。
-     * 无默认 TTL：M2.3 调用方显式传 30 分钟，M2.5 雪崩抖动时传随机 TTL，故不登记默认值。
-     * M2.4 空值缓存复用本 key：DB 未命中写空串标记 + 2 分钟短 TTL（穿透防护）。
-     * M2.5 TTL 随机抖动：正缓存 30min+[0,10min)、空值 2min+[0,30s)，批量回填错峰过期。
+     * 商户 ID → 商户详情缓存（String JSON）。
+     * M2.7 起正缓存为逻辑过期格式：LogicalExpiryEntry{data, expireTime}，无物理 TTL，expireTime=now+30min+随机[0,10min)，
+     * 逻辑过期后异步重建、旧值兜底直返；key 不存在时走互斥锁同步重建回退。
+     * 空值缓存复用本 key：DB 未命中写空串标记 + 2min+随机[0,30s) 短物理 TTL（穿透防护，随机 id 不会常驻）。
      */
-    SHOP_INFO("shop:info:%s", null, "商户ID→商户详情VO（String JSON，旁路缓存，TTL 由调用方显式传入；空值缓存复用本 key：空串标记+短TTL；M2.5 正/空值 TTL 均叠加随机抖动错峰过期）"),
+    SHOP_INFO("shop:info:%s", null, "商户ID→商户详情缓存（String JSON，M2.7 逻辑过期格式 LogicalExpiryEntry{data,expireTime}，无物理 TTL，逻辑过期后异步重建旧值兜底；空值缓存复用本 key：空串标记+短物理TTL 带随机抖动）"),
 
     /**
      * 商户 ID → 缓存重建互斥锁（值固定 "1"，SET NX EX 原子抢锁 + DEL 释放）。
