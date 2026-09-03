@@ -15,6 +15,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,6 +25,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 @SpringBootTest
 class ShopCacheIntegrationTest {
@@ -31,7 +34,7 @@ class ShopCacheIntegrationTest {
     @Autowired
     private ShopService shopService;
 
-    @Autowired
+    @MockitoSpyBean
     private ShopMapper shopMapper;
 
     @Autowired
@@ -106,12 +109,29 @@ class ShopCacheIntegrationTest {
     }
 
     @Test
-    void detailOfMissingShopThrowsWithoutCaching() {
+    void detailOfMissingShopWritesEmptyMarkerWithShortTtl() {
         long missingId = System.nanoTime();
 
         LocalinkException ex = assertThrows(LocalinkException.class, () -> shopService.detail(missingId));
+
         assertEquals(BaseCode.NOT_FOUND.getCode(), ex.getCode());
-        assertFalse(redisCache.hasKey(shopKey(missingId)));
+        assertEquals("", redisCache.strings().getString(shopKey(missingId)));
+        Long expire = redisCache.getExpire(shopKey(missingId));
+        assertTrue(expire > 0 && expire <= 120);
+        redisCache.delete(shopKey(missingId));
+    }
+
+    @Test
+    void emptyMarkerAbsorbsRepeatedMissesWithoutDbHit() {
+        long missingId = System.nanoTime();
+
+        LocalinkException first = assertThrows(LocalinkException.class, () -> shopService.detail(missingId));
+        LocalinkException second = assertThrows(LocalinkException.class, () -> shopService.detail(missingId));
+
+        assertEquals(BaseCode.NOT_FOUND.getCode(), first.getCode());
+        assertEquals(BaseCode.NOT_FOUND.getCode(), second.getCode());
+        verify(shopMapper, times(1)).selectById(missingId);
+        redisCache.delete(shopKey(missingId));
     }
 
     @Test
