@@ -27,3 +27,12 @@ mybatis-plus:
       id-type: assign_id
   configuration:
     map-underscore-to-camel-case: true
+
+localink:
+  cache:
+    bloom:
+      filters:
+        shop:
+          key-template: shop:bloom:id
+          expected-insertions: 100000
+          false-probability: 0.01

@@ -39,4 +39,10 @@ class KeyManageTest {
     void shopInfoHasNoDefaultTtl() {
         assertNull(KeyManage.SHOP_INFO.getTtl());
     }
+
+    @Test
+    void shopBloomKeyMirrorsYmlTemplate() {
+        assertEquals("lk:shop:bloom:id", keyBuilder.build(KeyManage.SHOP_BLOOM).getKey());
+        assertNull(KeyManage.SHOP_BLOOM.getTtl());
+    }
 }
