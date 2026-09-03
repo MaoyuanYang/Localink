@@ -19,6 +19,11 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -145,6 +150,42 @@ class ShopCacheIntegrationTest {
         assertEquals(BaseCode.NOT_FOUND.getCode(), second.getCode());
         verify(shopMapper, times(1)).selectById(missingId);
         redisCache.delete(shopKey(missingId));
+    }
+
+    @Test
+    void concurrentMissHitsDbExactlyOnce() throws Exception {
+        Long id = Long.valueOf(shopService.create(newDto()));
+        createdIds.add(id);
+        assertFalse(redisCache.hasKey(shopKey(id)));
+
+        int threads = 16;
+        CountDownLatch startGate = new CountDownLatch(1);
+        CountDownLatch done = new CountDownLatch(threads);
+        List<ShopVO> results = new CopyOnWriteArrayList<>();
+        List<Throwable> errors = new CopyOnWriteArrayList<>();
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        for (int i = 0; i < threads; i++) {
+            pool.submit(() -> {
+                try {
+                    startGate.await();
+                    results.add(shopService.detail(id));
+                } catch (Throwable t) {
+                    errors.add(t);
+                } finally {
+                    done.countDown();
+                }
+            });
+        }
+        startGate.countDown();
+        assertTrue(done.await(15, TimeUnit.SECONDS), "并发 detail 应在超时前全部返回");
+        pool.shutdown();
+
+        assertTrue(errors.isEmpty(), () -> "并发 detail 不应报错: " + errors);
+        assertEquals(threads, results.size());
+        String expectedName = results.get(0).getName();
+        results.forEach(vo -> assertEquals(expectedName, vo.getName()));
+        verify(shopMapper, times(1)).selectById(id);
+        assertFalse(redisCache.hasKey(keyBuilder.build(KeyManage.SHOP_REBUILD_LOCK, id)), "重建完成后锁应已释放");
     }
 
     @Test

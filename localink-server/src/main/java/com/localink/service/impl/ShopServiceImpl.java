@@ -29,6 +29,9 @@ public class ShopServiceImpl implements ShopService {
     private static final Duration SHOP_CACHE_TTL_JITTER = Duration.ofMinutes(10);
     private static final Duration SHOP_NULL_CACHE_TTL = Duration.ofMinutes(2);
     private static final Duration SHOP_NULL_TTL_JITTER = Duration.ofSeconds(30);
+    private static final Duration SHOP_REBUILD_LOCK_TTL = Duration.ofSeconds(10);
+    private static final int REBUILD_RETRY_LIMIT = 50;
+    private static final long REBUILD_RETRY_INTERVAL_MS = 50;
 
     private final ShopMapper shopMapper;
     private final RedisCache redisCache;
@@ -39,11 +42,47 @@ public class ShopServiceImpl implements ShopService {
         KeyBuild key = shopKey(id);
         String raw = redisCache.strings().getString(key);
         if (raw != null) {
-            if (raw.isEmpty()) {
-                throw new LocalinkException(BaseCode.NOT_FOUND, "商户不存在");
-            }
-            return RedisJsonCodec.deserialize(raw, ShopVO.class);
+            return resolveCached(raw);
         }
+        return rebuildWithMutex(id, key);
+    }
+
+    private ShopVO resolveCached(String raw) {
+        if (raw.isEmpty()) {
+            throw new LocalinkException(BaseCode.NOT_FOUND, "商户不存在");
+        }
+        return RedisJsonCodec.deserialize(raw, ShopVO.class);
+    }
+
+    private ShopVO rebuildWithMutex(Long id, KeyBuild key) {
+        KeyBuild lockKey = keyBuilder.build(KeyManage.SHOP_REBUILD_LOCK, id);
+        for (int attempt = 0; attempt < REBUILD_RETRY_LIMIT; attempt++) {
+            String raw = redisCache.strings().getString(key);
+            if (raw != null) {
+                return resolveCached(raw);
+            }
+            if (redisCache.strings().setIfAbsent(lockKey, "1", SHOP_REBUILD_LOCK_TTL)) {
+                try {
+                    raw = redisCache.strings().getString(key);
+                    if (raw != null) {
+                        return resolveCached(raw);
+                    }
+                    return loadAndCache(id, key);
+                } finally {
+                    redisCache.delete(lockKey);
+                }
+            }
+            try {
+                Thread.sleep(REBUILD_RETRY_INTERVAL_MS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new LocalinkException(BaseCode.SYSTEM_ERROR, "缓存重建等待被中断");
+            }
+        }
+        throw new LocalinkException(BaseCode.SYSTEM_ERROR, "缓存重建繁忙，请稍后再试");
+    }
+
+    private ShopVO loadAndCache(Long id, KeyBuild key) {
         Shop shop = shopMapper.selectById(id);
         if (shop == null) {
             redisCache.strings().set(key, "", jittered(SHOP_NULL_CACHE_TTL, SHOP_NULL_TTL_JITTER));
