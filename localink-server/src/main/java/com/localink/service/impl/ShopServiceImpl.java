@@ -7,6 +7,7 @@ import com.localink.api.vo.ShopVO;
 import com.localink.cache.KeyBuild;
 import com.localink.cache.KeyBuilder;
 import com.localink.cache.RedisCache;
+import com.localink.cache.json.RedisJsonCodec;
 import com.localink.common.code.BaseCode;
 import com.localink.common.exception.LocalinkException;
 import com.localink.constant.KeyManage;
@@ -24,6 +25,7 @@ import java.time.Duration;
 public class ShopServiceImpl implements ShopService {
 
     private static final Duration SHOP_CACHE_TTL = Duration.ofMinutes(30);
+    private static final Duration SHOP_NULL_CACHE_TTL = Duration.ofMinutes(2);
 
     private final ShopMapper shopMapper;
     private final RedisCache redisCache;
@@ -32,11 +34,19 @@ public class ShopServiceImpl implements ShopService {
     @Override
     public ShopVO detail(Long id) {
         KeyBuild key = shopKey(id);
-        ShopVO cached = redisCache.strings().get(key, ShopVO.class);
-        if (cached != null) {
-            return cached;
+        String raw = redisCache.strings().getString(key);
+        if (raw != null) {
+            if (raw.isEmpty()) {
+                throw new LocalinkException(BaseCode.NOT_FOUND, "商户不存在");
+            }
+            return RedisJsonCodec.deserialize(raw, ShopVO.class);
         }
-        ShopVO vo = toVO(requireExists(id));
+        Shop shop = shopMapper.selectById(id);
+        if (shop == null) {
+            redisCache.strings().set(key, "", SHOP_NULL_CACHE_TTL);
+            throw new LocalinkException(BaseCode.NOT_FOUND, "商户不存在");
+        }
+        ShopVO vo = toVO(shop);
         redisCache.strings().set(key, vo, SHOP_CACHE_TTL);
         return vo;
     }
