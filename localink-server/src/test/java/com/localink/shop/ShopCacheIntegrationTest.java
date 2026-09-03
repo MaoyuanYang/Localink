@@ -4,14 +4,17 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.TypeReference;
 import com.localink.api.dto.ShopDTO;
 import com.localink.api.vo.ShopVO;
+import com.localink.cache.BloomFilterRegistry;
 import com.localink.cache.KeyBuild;
 import com.localink.cache.KeyBuilder;
 import com.localink.cache.RedisCache;
 import com.localink.common.code.BaseCode;
 import com.localink.common.exception.LocalinkException;
+import com.localink.constant.BloomFilterAlias;
 import com.localink.constant.KeyManage;
 import com.localink.entity.Shop;
 import com.localink.framework.cache.LogicalExpiryEntry;
+import com.localink.framework.cache.ShopBloomFilterInitializer;
 import com.localink.mapper.ShopMapper;
 import com.localink.service.ShopService;
 import org.junit.jupiter.api.AfterEach;
@@ -40,6 +43,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -57,6 +61,12 @@ class ShopCacheIntegrationTest {
 
     @Autowired
     private KeyBuilder keyBuilder;
+
+    @Autowired
+    private BloomFilterRegistry bloomFilterRegistry;
+
+    @Autowired
+    private ShopBloomFilterInitializer shopBloomFilterInitializer;
 
     private static final Type ENTRY_TYPE = new TypeReference<LogicalExpiryEntry<ShopVO>>() {}.getType();
 
@@ -168,29 +178,74 @@ class ShopCacheIntegrationTest {
     }
 
     @Test
-    void detailOfMissingShopWritesEmptyMarkerWithShortTtl() {
-        long missingId = System.nanoTime();
+    void neverSeenIdRejectedByBloomBeforeCacheAndDb() {
+        long neverSeenId = System.nanoTime();
 
-        LocalinkException ex = assertThrows(LocalinkException.class, () -> shopService.detail(missingId));
+        LocalinkException ex = assertThrows(LocalinkException.class, () -> shopService.detail(neverSeenId));
 
         assertEquals(BaseCode.NOT_FOUND.getCode(), ex.getCode());
-        assertEquals("", redisCache.strings().getString(shopKey(missingId)));
-        Long expire = redisCache.getExpire(shopKey(missingId));
-        assertTrue(expire >= 115 && expire < 150);
-        redisCache.delete(shopKey(missingId));
+        verify(shopMapper, never()).selectById(neverSeenId);
+        assertFalse(redisCache.hasKey(shopKey(neverSeenId)), "布隆拦截的 id 不应产生任何缓存写入");
     }
 
     @Test
-    void emptyMarkerAbsorbsRepeatedMissesWithoutDbHit() {
-        long missingId = System.nanoTime();
+    void createdShopIsAddedToBloomFilter() {
+        Long id = Long.valueOf(shopService.create(newDto()));
+        createdIds.add(id);
 
-        LocalinkException first = assertThrows(LocalinkException.class, () -> shopService.detail(missingId));
-        LocalinkException second = assertThrows(LocalinkException.class, () -> shopService.detail(missingId));
+        assertTrue(bloomFilterRegistry.contains(BloomFilterAlias.SHOP, String.valueOf(id)));
+    }
+
+    @Test
+    void initializerBackfillsAllExistingShopsIntoBloom() {
+        Shop shop = new Shop();
+        shop.setName("布隆回灌-" + System.nanoTime());
+        shop.setTypeId(10L);
+        shop.setImages("/images/test-1.jpg");
+        shop.setArea("测试商圈");
+        shop.setAddress("测试地址1号");
+        shop.setLongitude(120.123456);
+        shop.setLatitude(30.123456);
+        shop.setAvgPrice(9900L);
+        shop.setOpenHours("09:00-21:00");
+        shopMapper.insert(shop);
+        createdIds.add(shop.getId());
+
+        assertFalse(bloomFilterRegistry.contains(BloomFilterAlias.SHOP, String.valueOf(shop.getId())));
+
+        shopBloomFilterInitializer.run(null);
+
+        assertTrue(bloomFilterRegistry.contains(BloomFilterAlias.SHOP, String.valueOf(shop.getId())));
+    }
+
+    @Test
+    void deletedShopStillPassesBloomAndWritesEmptyMarkerWithShortTtl() {
+        Long id = Long.valueOf(shopService.create(newDto()));
+        createdIds.add(id);
+        shopMapper.deleteById(id);
+
+        LocalinkException ex = assertThrows(LocalinkException.class, () -> shopService.detail(id));
+
+        assertEquals(BaseCode.NOT_FOUND.getCode(), ex.getCode());
+        assertEquals("", redisCache.strings().getString(shopKey(id)));
+        Long expire = redisCache.getExpire(shopKey(id));
+        assertTrue(expire >= 115 && expire < 150);
+        redisCache.delete(shopKey(id));
+    }
+
+    @Test
+    void emptyMarkerAbsorbsRepeatedDeletedShopMissesWithoutDbHit() {
+        Long id = Long.valueOf(shopService.create(newDto()));
+        createdIds.add(id);
+        shopMapper.deleteById(id);
+
+        LocalinkException first = assertThrows(LocalinkException.class, () -> shopService.detail(id));
+        LocalinkException second = assertThrows(LocalinkException.class, () -> shopService.detail(id));
 
         assertEquals(BaseCode.NOT_FOUND.getCode(), first.getCode());
         assertEquals(BaseCode.NOT_FOUND.getCode(), second.getCode());
-        verify(shopMapper, times(1)).selectById(missingId);
-        redisCache.delete(shopKey(missingId));
+        verify(shopMapper, times(1)).selectById(id);
+        redisCache.delete(shopKey(id));
     }
 
     @Test
@@ -314,11 +369,11 @@ class ShopCacheIntegrationTest {
         assertTrue(redisCache.hasKey(shopKey(id)));
 
         shopService.delete(id);
-        createdIds.remove(id);
 
         assertNull(shopMapper.selectById(id));
         assertFalse(redisCache.hasKey(shopKey(id)));
         LocalinkException ex = assertThrows(LocalinkException.class, () -> shopService.detail(id));
         assertEquals(BaseCode.NOT_FOUND.getCode(), ex.getCode());
+        assertEquals("", redisCache.strings().getString(shopKey(id)), "布隆不可删：已删商户走空值缓存兜底");
     }
 }
