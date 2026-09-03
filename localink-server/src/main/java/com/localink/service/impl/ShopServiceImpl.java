@@ -19,13 +19,16 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 @RequiredArgsConstructor
 public class ShopServiceImpl implements ShopService {
 
     private static final Duration SHOP_CACHE_TTL = Duration.ofMinutes(30);
+    private static final Duration SHOP_CACHE_TTL_JITTER = Duration.ofMinutes(10);
     private static final Duration SHOP_NULL_CACHE_TTL = Duration.ofMinutes(2);
+    private static final Duration SHOP_NULL_TTL_JITTER = Duration.ofSeconds(30);
 
     private final ShopMapper shopMapper;
     private final RedisCache redisCache;
@@ -43,11 +46,11 @@ public class ShopServiceImpl implements ShopService {
         }
         Shop shop = shopMapper.selectById(id);
         if (shop == null) {
-            redisCache.strings().set(key, "", SHOP_NULL_CACHE_TTL);
+            redisCache.strings().set(key, "", jittered(SHOP_NULL_CACHE_TTL, SHOP_NULL_TTL_JITTER));
             throw new LocalinkException(BaseCode.NOT_FOUND, "商户不存在");
         }
         ShopVO vo = toVO(shop);
-        redisCache.strings().set(key, vo, SHOP_CACHE_TTL);
+        redisCache.strings().set(key, vo, jittered(SHOP_CACHE_TTL, SHOP_CACHE_TTL_JITTER));
         return vo;
     }
 
@@ -91,6 +94,11 @@ public class ShopServiceImpl implements ShopService {
 
     private KeyBuild shopKey(Long id) {
         return keyBuilder.build(KeyManage.SHOP_INFO, id);
+    }
+
+    private Duration jittered(Duration base, Duration jitter) {
+        long seconds = ThreadLocalRandom.current().nextLong(jitter.toSeconds() + 1);
+        return base.plusSeconds(seconds);
     }
 
     private Shop requireExists(Long id) {

@@ -81,10 +81,23 @@ class ShopCacheIntegrationTest {
 
         assertTrue(redisCache.hasKey(shopKey(id)));
         Long expire = redisCache.getExpire(shopKey(id));
-        assertTrue(expire > 0 && expire <= 1800);
+        assertTrue(expire >= 1795 && expire < 2400);
         ShopVO cached = redisCache.strings().get(shopKey(id), ShopVO.class);
         assertEquals(vo.getName(), cached.getName());
         assertEquals(vo.getId(), cached.getId());
+    }
+
+    @Test
+    void batchBackfillTtlsAreJittered() {
+        List<Long> expires = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            Long id = Long.valueOf(shopService.create(newDto()));
+            createdIds.add(id);
+            shopService.detail(id);
+            expires.add(redisCache.getExpire(shopKey(id)));
+        }
+        expires.forEach(expire -> assertTrue(expire >= 1795 && expire < 2400));
+        assertTrue(expires.stream().distinct().count() >= 2);
     }
 
     @Test
@@ -117,7 +130,7 @@ class ShopCacheIntegrationTest {
         assertEquals(BaseCode.NOT_FOUND.getCode(), ex.getCode());
         assertEquals("", redisCache.strings().getString(shopKey(missingId)));
         Long expire = redisCache.getExpire(shopKey(missingId));
-        assertTrue(expire > 0 && expire <= 120);
+        assertTrue(expire >= 115 && expire < 150);
         redisCache.delete(shopKey(missingId));
     }
 
