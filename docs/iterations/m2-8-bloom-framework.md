@@ -19,7 +19,7 @@ cache-starter 补齐 architecture.md 预告的"布隆过滤器（Redisson）"职
 - **Redisson 引入方式：裸 `org.redisson:redisson` artifact + 自建条件化 RedissonClient Bean**。复用宿主已有的 `spring.data.redis` 连接参数（RedisProperties）以单机模式构建，`@ConditionalOnClass(RedissonClient.class)` + `@ConditionalOnMissingBean`——宿主自建或未来 lock-starter 接管时可整体覆盖。备选否决：`redisson-spring-boot-starter`——其 RedissonAutoConfiguration 会接管 RedisConnectionFactory/RedisTemplate，把 M2.1~M2.7 赖以生存的 Lettuce 栈整体替换掉，104 个存量测试暴露在不可控的行为漂移里；裸客户端 15 行配置代码换来零侵入。已知副作用（接受）：Redisson.create 启动即建连，应用启动从"惰性用 Redis"变为"强依赖 Redis 可用"——对依赖 docker compose 编排的本项目反而是启动期 fail-fast
 - **注册机制：`BloomFilterRegistry` 单例持 `Map<别名, RBloomFilter<String>>`，构造期按配置逐个初始化**。"配置化注册"体现在：yml 里配几个过滤器，注册表里就初始化几个，业务方以别名读写。备选否决：hmdp 参考项目的 `BeanDefinitionRegistryPostProcessor + PriorityOrdered` 动态注册 Bean——为"每个过滤器一个 Spring Bean"引入容器级扩展点，复杂度与收益不成比例；本项目 starter 既有风格是 `@Bean + @ConditionalOnMissingBean` 普通装配，单例注册表足以承载（过滤器数量个位数、无运行期增删需求）
 - **Key 治理合规：框架不硬编码任何 key**。过滤器 Redis key = KeyBuilder.build(宿主配置的 key-template)，与业务 key 同走 `lk:` 前缀治理；M2.9 会在 KeyManage 登记镜像枚举并用契约测试锁住，防止 yml 与治理登记处两处漂移
-- **构造期快速失败（fail-fast）**：key-template 缺失、或 Redis 中已存在同名过滤器但参数不一致（tryInit 返回 false，说明 expectedInsertions/falseProbability 被改过）→ 启动直接抛 `LocalinkException(SYSTEM_ERROR)`。参数不一致的布隆过滤器继续跑会导致误判率失控，宁可启动失败也不带病运行——这也是"演进式"口味：把配置错误暴露在最早的时点
+- **构造期快速失败（fail-fast）**：key-template 缺失、或 Redis 中已存在同名过滤器但参数不一致 → 启动直接抛 `LocalinkException(SYSTEM_ERROR)`。注意 Redisson `tryInit` 的真实语义：返回 false 仅表示"Redis 已存在该过滤器"（**与参数是否一致无关**），参数校验须用 `getExpectedInsertions()/getFalseProbability()` 回读存储参数与配置比对（实测精确回读）——一致则复用已有位图（跨应用/上下文共享正是价值），不一致才启动失败。参数不一致的布隆过滤器继续跑会导致误判率失控，宁可启动失败也不带病运行——这也是"演进式"口味：把配置错误暴露在最早的时点
 - **默认参数：expectedInsertions=10000、falseProbability=0.01**。1% 误判率是工业常规起点；预期插入量给保守默认值，实际过滤器在 yml 里按业务规模覆盖（M2.9 商户给 100000）。位数组内存 ≈ -n·ln(p)/(ln2)² / 8 字节，10 万条 1% 误判约 0.12MB，Redis 侧成本可忽略
 
 ## 3. 产出物
@@ -29,11 +29,11 @@ cache-starter 补齐 architecture.md 预告的"布隆过滤器（Redisson）"职
 | `pom.xml`（根） | dependencyManagement 新增 `org.redisson:redisson:${redisson.version}`（3.52.0 属性已有；starter 版声明保留给 M3.3 评估） |
 | `localink-cache-starter/pom.xml` | 声明 `redisson` 依赖（版本走父管理） |
 | `cache/config/CacheProperties.java` | 首个嵌套配置结构：`bloom.filters: Map<别名, Filter{keyTemplate, expectedInsertions=10000, falseProbability=0.01}>` |
-| `cache/BloomFilterRegistry.java`（新增） | 门面：`add(别名, value)` / `contains(别名, value)`（false 一定不存在，true 可能存在）；未知别名抛 LocalinkException(SYSTEM_ERROR)；构造期 getBloomFilter + tryInit，缺模板/参数冲突快速失败 |
+| `cache/BloomFilterRegistry.java`（新增） | 门面：`add(别名, value)` / `contains(别名, value)`（false 一定不存在，true 可能存在）；未知别名抛 LocalinkException(SYSTEM_ERROR)；构造期 getBloomFilter + tryInit，tryInit 失败时回读存储参数校验：同参复用、缺模板/参数冲突快速失败 |
 | `cache/config/CacheAutoConfiguration.java` | +2 Bean：`redissonClient`（destroyMethod=shutdown，@ConditionalOnBean(RedisProperties) 保证宿主有 Redis 配置）、`bloomFilterRegistry`（@ConditionalOnBean(RedissonClient)——无 Redisson 时注册表不装配，业务方注入即失败暴露） |
 | `test/.../TestKeys.java` | +BLOOM("test:m28:bloom") 测试模板 |
 | `test/resources/application.yml` | + demo 过滤器配置（expected-insertions: 1000, false-probability: 0.03，顺带验证参数可配） |
-| `test/.../BloomFilterRegistryIntegrationTest.java`（新增，4 测试） | 装配冒烟（Bean 存在 + 完整 key 契约 `lk:test:m28:bloom`）/ add→contains 真、未加 false / 经带前缀 key 直连 RBloomFilter 可见（证明操作的就是治理后 key）/ 未知别名抛错 |
+| `test/.../BloomFilterRegistryIntegrationTest.java`（新增，6 测试） | 装配冒烟（Bean 存在 + 完整 key 契约 `lk:test:m28:bloom`）/ add→contains 真、未加 false / 经带前缀 key 直连 RBloomFilter 可见（证明操作的就是治理后 key）/ 未知别名抛错 / **同参二次构造复用已有过滤器** / **参数冲突二次构造快速失败** |
 | `test/.../BloomFilterRegistryTest.java`（新增，纯单测） | 空 key-template 构造期快速失败（不依赖 Redis） |
 
 过滤器生命周期：随应用上下文构造（tryInit 幂等：Redis 已有同名同参实例返回 true），随 RedissonClient shutdown 释放连接；位图与 config 哈希持久在 Redis（key + `{key}:config`），应用重启后 tryInit 直接命中已有实例，**灌入的数据跨重启保留**——这正是 M2.9"启动灌数据"的价值前提：日常重启无需全量重灌也能工作，重灌只是兜底对账。
@@ -44,8 +44,8 @@ cache-starter 补齐 architecture.md 预告的"布隆过滤器（Redisson）"职
 |---|---|---|
 | 中间件预检 | `docker compose ps` | mysql/redis 双 healthy |
 | 全量构建 | `./mvnw clean package` | BUILD SUCCESS，12 模块 |
-| 全量测试 | 同上 | **109/109 通过**（cache-starter 39 = 原 34 + 新增 5；server 70 存量零回归） |
-| 定向明细 | BloomFilterRegistryIntegrationTest | 4/4：装配 + key 契约 / add-contains 语义 / 前缀 key 可见性 / 未知别名抛错 |
+| 全量测试 | 同上 | **115/115 通过**（cache-starter 41 = 原 34 + 新增 7；server 74 存量零回归；server 侧含 M2.9 接入后的用例数） |
+| 定向明细 | BloomFilterRegistryIntegrationTest | 6/6：装配 + key 契约 / add-contains 语义 / 前缀 key 可见性 / 未知别名抛错 / 同参二次构造复用 / 参数冲突二次构造快速失败 |
 | 定向明细 | BloomFilterRegistryTest | 1/1：空 key-template 构造快速失败 |
 | 存量回归 | RedisCacheIntegrationTest 28/28、ShopCacheIntegrationTest 10/10 等 | 全过——RedissonClient Bean 落入 server 上下文后，104 个存量测试无一受影响 |
 | 启动冒烟 | `powershell -File scripts/smoke.ps1` | PING-OK: pong + CLEANUP-OK |
@@ -53,6 +53,7 @@ cache-starter 补齐 architecture.md 预告的"布隆过滤器（Redisson）"职
 ### 排障记录
 
 - **`@AfterEach` 删布隆 key 导致后续测试报 "Bloom filter config has been changed"**：首版集成测试每个用例后 `RBloomFilter.delete()` 清理，下一个用例 `add()` 即抛 Redis 脚本断言错误。原因：delete 清掉了 Redis 侧 config 哈希，但注册表持有的 RBloomFilter 实例仍缓存着初始化状态直接调 add，Lua 脚本校验 Redis 里的 size/hashIterations 与参数一致时失败。教训：**Redisson RBloomFilter 实例与 Redis 侧结构是"一次性绑定"，运行期删除结构会让实例失效**（生产语义也如此——没人会在运行期删布隆）。修复：清理改为 `@AfterAll` + `@TestInstance(PER_CLASS)` 类级一次；用例间以 nanoTime 唯一值互不干扰
+- **`tryInit` 返回 false 并不代表参数冲突（实测推翻文档直觉）**：M2.9 接入时 server 侧第二个 Spring 上下文启动即失败——首版把 `tryInit()==false` 当"参数不一致"直接抛异常。写探针实证：对已存在的同参过滤器 tryInit 同样返回 false（它只回答"是否由我完成初始化"），参数一致性要用 `getExpectedInsertions()/getFalseProbability()` 回读比对（实测精确回读存储值）。修复：tryInit 失败 → 回读校验，同参复用、异参才快速失败，并补"同参复用/异参失败"两个回归测试。教训：**第三方 API 的返回值语义要用实验钉死，不能靠名字望文生义**
 
 ## 5. 学习清单
 
@@ -60,7 +61,7 @@ cache-starter 补齐 architecture.md 预告的"布隆过滤器（Redisson）"职
 1. 布隆过滤器原理：m 位位数组 + k 个哈希函数；写入把 k 个位置置 1，查询 k 个位置全 1 才返回"可能存在"——**false 一定不存在（无漏报），true 可能误判（有误报）**。误判率 p ≈ (1 - e^(-kn/m))^k，最优 k = (m/n)ln2；内存 m ≈ -n·ln(p)/(ln2)² 位。10 万元素 1% 误判 ≈ 0.12MB，成本极低
 2. 为什么适合防缓存穿透：不存在的一定不存在——布隆说没有的 id 根本不必进缓存/DB；误判的代价只是"多走一次常规缓存+DB 查询"，退化为无布隆行为，不放大故障
 3. 布隆为什么不能删除：位是多个元素共享的，删一个元素的位会连带破坏其他元素的判断。衍生方案：计数布隆（每位换成计数器，代价大）、布谷鸟过滤器（支持删除，Redisson 未内置）。工程替代：删除场景靠下游兜底（本项目：删除商户靠空值缓存拦截，M2.9 落地）
-4. Redisson RBloomFilter：位图存 Redis（String 位图 + `{key}:config` 哈希存参数），天然分布式、跨实例共享、重启不丢；`tryInit(expectedInsertions, falseProbability)` 计算并固化 m/k，参数与已存实例不一致返回 false——所以参数调整必须先删旧实例（本框架选择启动快速失败而非静默容忍）
+4. Redisson RBloomFilter：位图存 Redis（String 位图 + `{key}:config` 哈希存参数），天然分布式、跨实例共享、重启不丢；`tryInit(expectedInsertions, falseProbability)` 计算并固化 m/k——注意它返回 false 只表示"Redis 已存在该过滤器"（与参数是否一致无关），参数校验要用 `getExpectedInsertions()/getFalseProbability()` 回读比对，所以调整参数必须先删旧实例再启动（本框架对真冲突选择启动快速失败而非静默容忍）
 5. 裸客户端 vs spring-boot-starter 的接入权衡：starter 的自动配置会替换 RedisTemplate/ConnectionFactory（Lettuce→Redisson），对已有重度依赖 StringRedisTemplate 的系统是全局行为变更；裸客户端 + 自建单例把变更面收窄到"新增一个 Bean"
 6. 配置化注册的实现档次：BeanDefinitionRegistryPostProcessor 动态注册（每过滤器一个 Bean，容器级扩展，hmdp 方案）vs 单例注册表持 Map（一次装配全部持有，本项目方案）——过滤器无运行期增删、无按 Bean 生命周期管理的需求时，后者复杂度低一个量级
 7. fail-fast 在框架层的价值：key 缺失、参数冲突、未知别名，三类错误全部在"启动时/首次调用时"抛 SYSTEM_ERROR 而非静默降级——布隆静默失效意味着穿透防护悄悄消失，比启动失败危险得多

@@ -27,9 +27,11 @@ public class BloomFilterRegistry {
             }
             KeyBuild key = keyBuilder.build(() -> filter.getKeyTemplate());
             RBloomFilter<String> bloomFilter = redissonClient.getBloomFilter(key.getKey());
-            if (!bloomFilter.tryInit(filter.getExpectedInsertions(), filter.getFalseProbability())) {
+            if (!bloomFilter.tryInit(filter.getExpectedInsertions(), filter.getFalseProbability())
+                    && (bloomFilter.getExpectedInsertions() != filter.getExpectedInsertions()
+                    || Double.compare(bloomFilter.getFalseProbability(), filter.getFalseProbability()) != 0)) {
                 throw new LocalinkException(BaseCode.SYSTEM_ERROR,
-                        "布隆过滤器初始化失败（Redis 中已存在同名且参数不一致的实例，需先删除或对齐参数）: " + key.getKey());
+                        "布隆过滤器已存在且参数不一致（调整参数需先删除 Redis 中的旧实例）: " + key.getKey());
             }
             filters.put(alias, bloomFilter);
         }
