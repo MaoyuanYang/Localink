@@ -1,5 +1,7 @@
 package com.localink.shop;
 
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.TypeReference;
 import com.localink.api.dto.ShopDTO;
 import com.localink.api.vo.ShopVO;
 import com.localink.cache.KeyBuild;
@@ -9,6 +11,7 @@ import com.localink.common.code.BaseCode;
 import com.localink.common.exception.LocalinkException;
 import com.localink.constant.KeyManage;
 import com.localink.entity.Shop;
+import com.localink.framework.cache.LogicalExpiryEntry;
 import com.localink.mapper.ShopMapper;
 import com.localink.service.ShopService;
 import org.junit.jupiter.api.AfterEach;
@@ -17,8 +20,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
+import java.lang.reflect.Type;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
@@ -27,9 +34,12 @@ import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -47,6 +57,8 @@ class ShopCacheIntegrationTest {
 
     @Autowired
     private KeyBuilder keyBuilder;
+
+    private static final Type ENTRY_TYPE = new TypeReference<LogicalExpiryEntry<ShopVO>>() {}.getType();
 
     private final List<Long> createdIds = new ArrayList<>();
 
@@ -76,33 +88,62 @@ class ShopCacheIntegrationTest {
         return keyBuilder.build(KeyManage.SHOP_INFO, id);
     }
 
+    private LogicalExpiryEntry<ShopVO> readEntry(Long id) {
+        return JSON.parseObject(redisCache.strings().getString(shopKey(id)), ENTRY_TYPE);
+    }
+
+    private void expireEntryNow(Long id) {
+        LogicalExpiryEntry<ShopVO> entry = new LogicalExpiryEntry<>();
+        ShopVO stale = new ShopVO();
+        stale.setId(id);
+        stale.setName("stale-" + System.nanoTime());
+        entry.setData(stale);
+        entry.setExpireTime(LocalDateTime.now().minusHours(1));
+        redisCache.strings().set(shopKey(id), entry);
+    }
+
+    private void awaitEntryName(Long id, String expectedName) throws InterruptedException {
+        long deadline = System.currentTimeMillis() + 5000;
+        while (System.currentTimeMillis() < deadline) {
+            LogicalExpiryEntry<ShopVO> entry = readEntry(id);
+            if (entry != null && entry.getData() != null && expectedName.equals(entry.getData().getName())) {
+                return;
+            }
+            Thread.sleep(100);
+        }
+        LogicalExpiryEntry<ShopVO> entry = readEntry(id);
+        fail("等待缓存重建超时, 期望 name=" + expectedName + ", 实际=" + (entry == null || entry.getData() == null ? "null" : entry.getData().getName()));
+    }
+
     @Test
-    void detailMissFillsCacheWithTtl() {
+    void detailMissFillsCacheWithLogicalExpiry() {
         Long id = Long.valueOf(shopService.create(newDto()));
         createdIds.add(id);
         assertFalse(redisCache.hasKey(shopKey(id)));
 
+        LocalDateTime before = LocalDateTime.now();
         ShopVO vo = shopService.detail(id);
 
         assertTrue(redisCache.hasKey(shopKey(id)));
-        Long expire = redisCache.getExpire(shopKey(id));
-        assertTrue(expire >= 1795 && expire < 2400);
-        ShopVO cached = redisCache.strings().get(shopKey(id), ShopVO.class);
-        assertEquals(vo.getName(), cached.getName());
-        assertEquals(vo.getId(), cached.getId());
+        assertEquals(-1L, redisCache.getExpire(shopKey(id)));
+        LogicalExpiryEntry<ShopVO> entry = readEntry(id);
+        assertNotNull(entry);
+        assertEquals(vo.getName(), entry.getData().getName());
+        assertTrue(!entry.getExpireTime().isBefore(before.plusSeconds(1795)));
+        assertTrue(entry.getExpireTime().isBefore(LocalDateTime.now().plusSeconds(2400)));
     }
 
     @Test
-    void batchBackfillTtlsAreJittered() {
-        List<Long> expires = new ArrayList<>();
+    void batchBackfillLogicalExpiriesAreJittered() {
+        Set<LocalDateTime> expiries = new HashSet<>();
         for (int i = 0; i < 5; i++) {
             Long id = Long.valueOf(shopService.create(newDto()));
             createdIds.add(id);
             shopService.detail(id);
-            expires.add(redisCache.getExpire(shopKey(id)));
+            assertEquals(-1L, redisCache.getExpire(shopKey(id)));
+            expiries.add(readEntry(id).getExpireTime().truncatedTo(java.time.temporal.ChronoUnit.SECONDS));
         }
-        expires.forEach(expire -> assertTrue(expire >= 1795 && expire < 2400));
-        assertTrue(expires.stream().distinct().count() >= 2);
+        assertTrue(expiries.size() >= 2);
     }
 
     @Test
@@ -150,6 +191,83 @@ class ShopCacheIntegrationTest {
         assertEquals(BaseCode.NOT_FOUND.getCode(), second.getCode());
         verify(shopMapper, times(1)).selectById(missingId);
         redisCache.delete(shopKey(missingId));
+    }
+
+    @Test
+    void freshEntryServedDirectlyWithoutDbHit() {
+        Long id = Long.valueOf(shopService.create(newDto()));
+        createdIds.add(id);
+        ShopVO first = shopService.detail(id);
+        verify(shopMapper, times(1)).selectById(id);
+
+        ShopVO second = shopService.detail(id);
+
+        assertEquals(first.getName(), second.getName());
+        verify(shopMapper, times(1)).selectById(id);
+    }
+
+    @Test
+    void expiredEntryServesStaleAndRebuildsAsync() throws Exception {
+        Long id = Long.valueOf(shopService.create(newDto()));
+        createdIds.add(id);
+        shopService.detail(id);
+        String freshName = "rebuild-after-" + System.nanoTime();
+        Shop direct = new Shop();
+        direct.setId(id);
+        direct.setName(freshName);
+        shopMapper.updateById(direct);
+        expireEntryNow(id);
+
+        ShopVO served = shopService.detail(id);
+
+        assertNotEquals(freshName, served.getName());
+        awaitEntryName(id, freshName);
+        assertEquals(freshName, shopService.detail(id).getName());
+        verify(shopMapper, times(2)).selectById(id);
+    }
+
+    @Test
+    void concurrentExpiredKeyTriggersSingleRebuild() throws Exception {
+        Long id = Long.valueOf(shopService.create(newDto()));
+        createdIds.add(id);
+        shopService.detail(id);
+        String freshName = "concurrent-rebuild-" + System.nanoTime();
+        Shop direct = new Shop();
+        direct.setId(id);
+        direct.setName(freshName);
+        shopMapper.updateById(direct);
+        expireEntryNow(id);
+        String staleName = readEntry(id).getData().getName();
+
+        int threads = 16;
+        CountDownLatch startGate = new CountDownLatch(1);
+        CountDownLatch done = new CountDownLatch(threads);
+        List<String> names = new CopyOnWriteArrayList<>();
+        List<Throwable> errors = new CopyOnWriteArrayList<>();
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        for (int i = 0; i < threads; i++) {
+            pool.submit(() -> {
+                try {
+                    startGate.await();
+                    names.add(shopService.detail(id).getName());
+                } catch (Throwable t) {
+                    errors.add(t);
+                } finally {
+                    done.countDown();
+                }
+            });
+        }
+        startGate.countDown();
+        assertTrue(done.await(15, TimeUnit.SECONDS), "并发 detail 应在超时前全部返回");
+        pool.shutdown();
+
+        assertTrue(errors.isEmpty(), () -> "并发 detail 不应报错: " + errors);
+        assertEquals(threads, names.size());
+        names.forEach(name -> assertTrue(name.equals(staleName) || name.equals(freshName)));
+        assertTrue(names.contains(staleName), "应有请求拿到旧值兜底");
+        awaitEntryName(id, freshName);
+        verify(shopMapper, times(2)).selectById(id);
+        assertFalse(redisCache.hasKey(keyBuilder.build(KeyManage.SHOP_REBUILD_LOCK, id)), "异步重建完成后锁应已释放");
     }
 
     @Test
