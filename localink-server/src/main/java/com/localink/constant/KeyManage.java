@@ -34,7 +34,15 @@ public enum KeyManage implements KeyTemplate {
      * 商户 ID → 缓存重建互斥锁（值固定 "1"，SET NX EX 原子抢锁 + DEL 释放）。
      * 自研简单锁：无持有者标识，业务执行超过锁 TTL 时释放会误删他人锁——留待 M3.3 Redisson 演进。
      */
-    SHOP_REBUILD_LOCK("shop:rebuild:lock:%s", Duration.ofSeconds(10), "商户缓存重建互斥锁（SET NX EX 自研简单锁，锁超时兜底防死锁）");
+    SHOP_REBUILD_LOCK("shop:rebuild:lock:%s", Duration.ofSeconds(10), "商户缓存重建互斥锁（SET NX EX 自研简单锁，锁超时兜底防死锁）"),
+
+    /**
+     * 商户 ID 布隆过滤器（Redisson RBloomFilter 位图 + {key}:config 参数哈希，无 TTL 跨重启保留）。
+     * M2.9：启动全量灌入 + create 落库同步 add；detail() 前置拦截（不存在直接 NOT_FOUND，不进缓存/DB）。
+     * 布隆不可删除：delete 商户后仍会通过布隆，落到空值缓存路径兜底（拦"曾经存在"）。
+     * 模板与 application.yml 的 localink.cache.bloom.filters.shop.key-template 镜像，KeyManageTest 契约锁定。
+     */
+    SHOP_BLOOM("shop:bloom:id", null, "商户ID布隆过滤器（Redisson RBloomFilter，防穿透第一层：拦'从未存在'；无TTL，启动全量灌+create同步add，不可删→空值缓存兜底'曾经存在'）");
 
     private final String template;
     private final Duration ttl;

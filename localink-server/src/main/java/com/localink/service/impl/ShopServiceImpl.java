@@ -9,9 +9,11 @@ import com.localink.api.dto.ShopDTO;
 import com.localink.api.vo.ShopVO;
 import com.localink.cache.KeyBuild;
 import com.localink.cache.KeyBuilder;
+import com.localink.cache.BloomFilterRegistry;
 import com.localink.cache.RedisCache;
 import com.localink.common.code.BaseCode;
 import com.localink.common.exception.LocalinkException;
+import com.localink.constant.BloomFilterAlias;
 import com.localink.constant.KeyManage;
 import com.localink.entity.Shop;
 import com.localink.framework.cache.LogicalExpiryEntry;
@@ -46,9 +48,13 @@ public class ShopServiceImpl implements ShopService {
     private final RedisCache redisCache;
     private final KeyBuilder keyBuilder;
     private final ThreadPoolTaskExecutor cacheRebuildExecutor;
+    private final BloomFilterRegistry bloomFilterRegistry;
 
     @Override
     public ShopVO detail(Long id) {
+        if (!bloomFilterRegistry.contains(BloomFilterAlias.SHOP, String.valueOf(id))) {
+            throw new LocalinkException(BaseCode.NOT_FOUND, "商户不存在");
+        }
         KeyBuild key = shopKey(id);
         String raw = redisCache.strings().getString(key);
         if (raw == null) {
@@ -173,6 +179,7 @@ public class ShopServiceImpl implements ShopService {
         Shop shop = new Shop();
         BeanUtils.copyProperties(dto, shop, "id");
         shopMapper.insert(shop);
+        bloomFilterRegistry.add(BloomFilterAlias.SHOP, String.valueOf(shop.getId()));
         return String.valueOf(shop.getId());
     }
 
