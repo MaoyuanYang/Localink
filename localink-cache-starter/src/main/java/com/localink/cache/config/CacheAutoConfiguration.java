@@ -2,6 +2,7 @@ package com.localink.cache.config;
 
 import com.localink.cache.BloomFilterRegistry;
 import com.localink.cache.KeyBuilder;
+import com.localink.cache.LocalCacheRegistry;
 import com.localink.cache.RedisCache;
 import com.localink.cache.impl.DefaultRedisCache;
 import org.redisson.Redisson;
@@ -20,7 +21,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 /**
- * cache-starter 自动装配：KeyBuilder（前缀可配）+ 宿主存在 StringRedisTemplate 时注册 RedisCache 门面，
+ * cache-starter 自动装配：KeyBuilder（前缀可配）+ 本地缓存注册表（Caffeine，配置驱动）
+ * + 宿主存在 StringRedisTemplate 时注册 RedisCache 门面，
  * 类路径存在 Redisson 时注册 RedissonClient（单机模式，复用 spring.data.redis 连接参数）与布隆过滤器注册表。
  */
 @AutoConfiguration
@@ -33,6 +35,12 @@ public class CacheAutoConfiguration {
     @ConditionalOnMissingBean
     public KeyBuilder keyBuilder(CacheProperties cacheProperties) {
         return new KeyBuilder(cacheProperties.getKeyPrefix());
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(LocalCacheRegistry.class)
+    public LocalCacheRegistry localCacheRegistry(CacheProperties cacheProperties) {
+        return new LocalCacheRegistry(cacheProperties);
     }
 
     @Bean

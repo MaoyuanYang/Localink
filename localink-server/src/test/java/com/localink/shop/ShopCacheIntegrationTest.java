@@ -7,6 +7,7 @@ import com.localink.api.vo.ShopVO;
 import com.localink.cache.BloomFilterRegistry;
 import com.localink.cache.KeyBuild;
 import com.localink.cache.KeyBuilder;
+import com.localink.cache.LocalCache;
 import com.localink.cache.RedisCache;
 import com.localink.common.code.BaseCode;
 import com.localink.common.exception.LocalinkException;
@@ -43,6 +44,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -56,14 +60,17 @@ class ShopCacheIntegrationTest {
     @MockitoSpyBean
     private ShopMapper shopMapper;
 
-    @Autowired
+    @MockitoSpyBean
     private RedisCache redisCache;
 
     @Autowired
     private KeyBuilder keyBuilder;
 
-    @Autowired
+    @MockitoSpyBean
     private BloomFilterRegistry bloomFilterRegistry;
+
+    @MockitoSpyBean
+    private LocalCache<String, ShopVO> shopLocalCache;
 
     @Autowired
     private ShopBloomFilterInitializer shopBloomFilterInitializer;
@@ -77,6 +84,7 @@ class ShopCacheIntegrationTest {
         createdIds.forEach(id -> {
             shopMapper.deleteById(id);
             redisCache.delete(shopKey(id));
+            expireLocalCacheNow(id);
         });
     }
 
@@ -110,6 +118,10 @@ class ShopCacheIntegrationTest {
         entry.setData(stale);
         entry.setExpireTime(LocalDateTime.now().minusHours(1));
         redisCache.strings().set(shopKey(id), entry);
+    }
+
+    private void expireLocalCacheNow(Long id) {
+        shopLocalCache.invalidate(String.valueOf(id));
     }
 
     private void awaitEntryName(Long id, String expectedName) throws InterruptedException {
@@ -272,6 +284,7 @@ class ShopCacheIntegrationTest {
         direct.setName(freshName);
         shopMapper.updateById(direct);
         expireEntryNow(id);
+        expireLocalCacheNow(id);
 
         ShopVO served = shopService.detail(id);
 
@@ -292,6 +305,7 @@ class ShopCacheIntegrationTest {
         direct.setName(freshName);
         shopMapper.updateById(direct);
         expireEntryNow(id);
+        expireLocalCacheNow(id);
         String staleName = readEntry(id).getData().getName();
 
         int threads = 16;
@@ -375,5 +389,62 @@ class ShopCacheIntegrationTest {
         LocalinkException ex = assertThrows(LocalinkException.class, () -> shopService.detail(id));
         assertEquals(BaseCode.NOT_FOUND.getCode(), ex.getCode());
         assertEquals("", redisCache.strings().getString(shopKey(id)), "布隆不可删：已删商户走空值缓存兜底");
+    }
+
+    @Test
+    void localCacheHitServesWithoutRedisAndBloom() {
+        Long id = Long.valueOf(shopService.create(newDto()));
+        createdIds.add(id);
+        shopService.detail(id);
+        expireLocalCacheNow(id);
+        shopService.detail(id);
+        assertNotNull(shopLocalCache.getIfPresent(String.valueOf(id)), "Redis 新鲜 entry 应回填 L1");
+        clearInvocations(redisCache, bloomFilterRegistry);
+
+        ShopVO hit = shopService.detail(id);
+
+        assertNotNull(hit);
+        verify(redisCache, never()).strings();
+        verify(bloomFilterRegistry, never()).contains(anyString(), anyString());
+    }
+
+    @Test
+    void expiredEntryServesStaleWithoutPopulatingLocalCache() throws InterruptedException {
+        Long id = Long.valueOf(shopService.create(newDto()));
+        createdIds.add(id);
+        shopService.detail(id);
+        String freshName = "l1-stale-" + System.nanoTime();
+        Shop direct = new Shop();
+        direct.setId(id);
+        direct.setName(freshName);
+        shopMapper.updateById(direct);
+        expireEntryNow(id);
+        expireLocalCacheNow(id);
+
+        ShopVO served = shopService.detail(id);
+
+        assertNotEquals(freshName, served.getName());
+        verify(shopLocalCache, never()).put(anyString(), argThat(vo -> vo != null && vo.getName().startsWith("stale-")));
+        awaitEntryName(id, freshName);
+    }
+
+    @Test
+    void updateAndDeleteInvalidateLocalCache() {
+        Long id = Long.valueOf(shopService.create(newDto()));
+        createdIds.add(id);
+        shopService.detail(id);
+        assertNotNull(shopLocalCache.getIfPresent(String.valueOf(id)));
+
+        ShopDTO updateDto = newDto();
+        updateDto.setId(id);
+        updateDto.setName("L1失效-更新-" + System.nanoTime());
+        shopService.update(updateDto);
+
+        assertNull(shopLocalCache.getIfPresent(String.valueOf(id)));
+        assertEquals(updateDto.getName(), shopService.detail(id).getName());
+
+        shopService.delete(id);
+
+        assertNull(shopLocalCache.getIfPresent(String.valueOf(id)));
     }
 }
