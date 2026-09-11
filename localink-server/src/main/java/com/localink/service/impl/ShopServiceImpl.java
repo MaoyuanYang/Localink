@@ -17,6 +17,7 @@ import com.localink.constant.BloomFilterAlias;
 import com.localink.constant.KeyManage;
 import com.localink.entity.Shop;
 import com.localink.framework.cache.LogicalExpiryEntry;
+import com.localink.cache.LocalCache;
 import com.localink.mapper.ShopMapper;
 import com.localink.service.ShopService;
 import lombok.RequiredArgsConstructor;
@@ -49,9 +50,14 @@ public class ShopServiceImpl implements ShopService {
     private final KeyBuilder keyBuilder;
     private final ThreadPoolTaskExecutor cacheRebuildExecutor;
     private final BloomFilterRegistry bloomFilterRegistry;
+    private final LocalCache<String, ShopVO> shopLocalCache;
 
     @Override
     public ShopVO detail(Long id) {
+        ShopVO local = shopLocalCache.getIfPresent(localKey(id));
+        if (local != null) {
+            return local;
+        }
         if (!bloomFilterRegistry.contains(BloomFilterAlias.SHOP, String.valueOf(id))) {
             throw new LocalinkException(BaseCode.NOT_FOUND, "商户不存在");
         }
@@ -68,6 +74,7 @@ public class ShopServiceImpl implements ShopService {
             return rebuildWithMutex(id, key);
         }
         if (entry.getExpireTime().isAfter(LocalDateTime.now())) {
+            shopLocalCache.put(localKey(id), entry.getData());
             return entry.getData();
         }
         triggerAsyncRebuild(id, key);
@@ -153,6 +160,7 @@ public class ShopServiceImpl implements ShopService {
         }
         ShopVO vo = toVO(shop);
         redisCache.strings().set(key, entryOf(vo));
+        shopLocalCache.put(localKey(id), vo);
         return vo;
     }
 
@@ -193,6 +201,7 @@ public class ShopServiceImpl implements ShopService {
         BeanUtils.copyProperties(dto, shop);
         shopMapper.updateById(shop);
         redisCache.delete(shopKey(dto.getId()));
+        shopLocalCache.invalidate(localKey(dto.getId()));
     }
 
     @Override
@@ -200,10 +209,15 @@ public class ShopServiceImpl implements ShopService {
         requireExists(id);
         shopMapper.deleteById(id);
         redisCache.delete(shopKey(id));
+        shopLocalCache.invalidate(localKey(id));
     }
 
     private KeyBuild shopKey(Long id) {
         return keyBuilder.build(KeyManage.SHOP_INFO, id);
+    }
+
+    private String localKey(Long id) {
+        return String.valueOf(id);
     }
 
     private Duration jittered(Duration base, Duration jitter) {

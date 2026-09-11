@@ -36,3 +36,8 @@ localink:
           key-template: shop:bloom:id
           expected-insertions: 100000
           false-probability: 0.01
+    local:
+      caches:
+        shop:
+          maximum-size: 1000
+          expire-after-write: 10s
