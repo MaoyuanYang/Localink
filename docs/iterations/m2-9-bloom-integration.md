@@ -4,7 +4,7 @@
 |---|---|
 | 迭代编号 | M2.9 |
 | 分支 | `feature/m2-9-bloom-integration`（基于 `feature/m2-8-bloom-framework` 栈式创建，依赖 PR #40） |
-| 状态 | 已实现（PR #41 待合入，2026-09-03；合入并学习确认后勾选 roadmap） |
+| 状态 | 已完成（PR #41 合入，2026-09-11 用户学习确认，roadmap 已勾选） |
 
 ---
 
