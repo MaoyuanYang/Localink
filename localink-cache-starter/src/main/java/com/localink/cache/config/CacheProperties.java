@@ -4,6 +4,7 @@ import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -24,6 +25,11 @@ public class CacheProperties {
      * 布隆过滤器配置。
      */
     private Bloom bloom = new Bloom();
+
+    /**
+     * 本地缓存配置。
+     */
+    private Local local = new Local();
 
     @Getter
     @Setter
@@ -53,5 +59,30 @@ public class CacheProperties {
          * 误判率上限。
          */
         private double falseProbability = 0.01;
+    }
+
+    @Getter
+    @Setter
+    public static class Local {
+
+        /**
+         * 本地缓存注册表：key 为业务别名（如 shop），value 为该缓存的参数。
+         */
+        private Map<String, LocalCacheSpec> caches = new LinkedHashMap<>();
+    }
+
+    @Getter
+    @Setter
+    public static class LocalCacheSpec {
+
+        /**
+         * 最大条目数（超出走 W-TinyLFU 淘汰）。
+         */
+        private long maximumSize = 1000;
+
+        /**
+         * 写入后过期时长（本地缓存生命周期，与 Redis 层 TTL 独立）。
+         */
+        private Duration expireAfterWrite = Duration.ofSeconds(10);
     }
 }
