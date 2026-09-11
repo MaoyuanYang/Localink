@@ -21,7 +21,9 @@ enum TestKeys implements KeyTemplate {
 
     PAIR("test:m22:pair:%s:%s"),
 
-    HASH_TAG("test:m22:tag:{%s}");
+    HASH_TAG("test:m22:tag:{%s}"),
+
+    BLOOM("test:m28:bloom");
 
     private final String template;
 

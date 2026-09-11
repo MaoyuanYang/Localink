@@ -5,3 +5,12 @@ spring:
     redis:
       host: localhost
       port: 6379
+
+localink:
+  cache:
+    bloom:
+      filters:
+        demo:
+          key-template: test:m28:bloom
+          expected-insertions: 1000
+          false-probability: 0.03
