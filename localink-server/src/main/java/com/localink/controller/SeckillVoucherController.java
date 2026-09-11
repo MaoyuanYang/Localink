@@ -4,6 +4,7 @@ import com.localink.api.dto.SeckillVoucherDTO;
 import com.localink.api.vo.SeckillVoucherVO;
 import com.localink.common.result.Result;
 import com.localink.service.SeckillVoucherService;
+import com.localink.service.VoucherOrderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -24,6 +25,8 @@ import java.util.List;
 public class SeckillVoucherController {
 
     private final SeckillVoucherService seckillVoucherService;
+
+    private final VoucherOrderService voucherOrderService;
 
     @PostMapping
     public Result<String> create(@Validated @RequestBody SeckillVoucherDTO dto) {
@@ -48,7 +51,12 @@ public class SeckillVoucherController {
     }
 
     @GetMapping("/list")
-    public Result<List<SeckillVoucherVO>> list(@RequestParam Long shopId) {
+    public Result<List<SeckillVoucherVO>> listByShop(@RequestParam Long shopId) {
         return Result.ok(seckillVoucherService.listByShop(shopId));
+    }
+
+    @PostMapping("/{voucherId}/seckill")
+    public Result<String> seckill(@PathVariable Long voucherId) {
+        return Result.ok(voucherOrderService.seckill(voucherId));
     }
 }
