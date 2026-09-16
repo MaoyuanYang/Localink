@@ -28,6 +28,7 @@ public enum BaseCode {
     UNAUTHORIZED(40002, "未登录或登录已过期"),
     FORBIDDEN(40003, "无访问权限"),
     NOT_FOUND(40004, "资源不存在"),
+    LOCK_TIMEOUT(40005, "操作繁忙，请稍后重试"),
 
     SHOP_TYPE_IN_USE(50001, "该类型下仍有商户，无法删除");
 
