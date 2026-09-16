@@ -3,6 +3,7 @@ package com.localink.cache.impl;
 import com.localink.cache.KeyBuild;
 import com.localink.cache.RedisCache;
 import com.localink.cache.RedisHashOps;
+import com.localink.cache.RedisScriptOps;
 import com.localink.cache.RedisSetOps;
 import com.localink.cache.RedisStringOps;
 import com.localink.cache.RedisZSetOps;
@@ -22,6 +23,7 @@ public class DefaultRedisCache implements RedisCache {
     private final RedisHashOps hashOps;
     private final RedisSetOps setOps;
     private final RedisZSetOps zsetOps;
+    private final RedisScriptOps scriptOps;
 
     public DefaultRedisCache(StringRedisTemplate redisTemplate) {
         this.redisTemplate = redisTemplate;
@@ -29,6 +31,7 @@ public class DefaultRedisCache implements RedisCache {
         this.hashOps = new DefaultRedisHashOps(redisTemplate);
         this.setOps = new DefaultRedisSetOps(redisTemplate);
         this.zsetOps = new DefaultRedisZSetOps(redisTemplate);
+        this.scriptOps = new DefaultRedisScriptOps(redisTemplate);
     }
 
     @Override
@@ -78,5 +81,10 @@ public class DefaultRedisCache implements RedisCache {
     @Override
     public RedisZSetOps zsets() {
         return zsetOps;
+    }
+
+    @Override
+    public RedisScriptOps scripts() {
+        return scriptOps;
     }
 }

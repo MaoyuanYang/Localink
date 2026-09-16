@@ -50,7 +50,21 @@ public enum KeyManage implements KeyTemplate {
      * M3.5 经 @ServiceLock(name="seckill:order", key=用户ID) 生成，实际 key = lk: + 本模板——
      * 注解值必须是编译期常量，无法引用枚举，故此处登记仅作文档对齐与 redis-cli 观测入口，不经 KeyBuilder 构建。
      */
-    SECKILL_ORDER_LOCK("lock:seckill:order:%s", null, "秒杀一人一单用户维度锁（Redisson 可重入+看门狗；@ServiceLock 生成 lk:lock:seckill:order:{userId}，此处登记为文档对齐）");
+    SECKILL_ORDER_LOCK("lock:seckill:order:%s", null, "秒杀一人一单用户维度锁（M3.5 引入，M3.6 Lua 原子判重后从热路径退役；登记保留作文档）"),
+
+    /**
+     * 券 ID → 秒杀库存（String，纯数字）。{voucherId} hash tag 与 SECKILL_ORDER_USERS 同槽，
+     * Lua 多 key 原子执行的前提（Redis Cluster 下跨槽报错，单实例预留演进空间）。
+     * 预热三时机：创建钩子 / 启动回灌（endTime 未到的全部券，以 DB 当前值为准覆盖）/ 运营更新；
+     * TTL 由预热与每次扣减刷新为 now→endTime。
+     */
+    SECKILL_STOCK("seckill:stock:{%s}", null, "秒杀库存（String 数字，hash tag 同槽；Lua 原子扣减，返回 1 未预热由启动回灌兜底）"),
+
+    /**
+     * 券 ID → 已购用户集合（Set）。与 SECKILL_STOCK 同槽；Lua 内 SISMEMBER 判重 + SADD 登记，
+     * 判重与扣减同脚本原子完成——M3.5 用户维度锁的替代者。
+     */
+    SECKILL_ORDER_USERS("seckill:order:{%s}", null, "秒杀已购用户集合（Set，hash tag 同槽，一人一单 Lua 原子判重）");
 
     private final String template;
     private final Duration ttl;

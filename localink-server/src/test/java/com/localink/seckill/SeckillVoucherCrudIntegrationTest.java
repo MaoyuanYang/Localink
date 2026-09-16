@@ -10,6 +10,7 @@ import com.localink.entity.SeckillVoucher;
 import com.localink.entity.Voucher;
 import com.localink.mapper.SeckillVoucherMapper;
 import com.localink.mapper.VoucherMapper;
+import com.localink.framework.seckill.SeckillStockCache;
 import com.localink.service.SeckillVoucherService;
 import com.localink.service.VoucherService;
 import org.junit.jupiter.api.AfterEach;
@@ -37,6 +38,9 @@ class SeckillVoucherCrudIntegrationTest {
     private VoucherService voucherService;
 
     @Autowired
+    private SeckillStockCache seckillStockCache;
+
+    @Autowired
     private VoucherMapper voucherMapper;
 
     @Autowired
@@ -48,6 +52,7 @@ class SeckillVoucherCrudIntegrationTest {
     void cleanup() {
         createdVoucherIds.forEach(id -> {
             seckillVoucherMapper.delete(new LambdaQueryWrapper<SeckillVoucher>().eq(SeckillVoucher::getVoucherId, id));
+            seckillStockCache.evict(id);
             voucherMapper.deleteById(id);
         });
     }

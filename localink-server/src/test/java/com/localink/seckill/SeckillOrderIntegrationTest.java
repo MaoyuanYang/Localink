@@ -13,6 +13,7 @@ import com.localink.entity.SeckillVoucher;
 import com.localink.entity.User;
 import com.localink.entity.Voucher;
 import com.localink.entity.VoucherOrder;
+import com.localink.framework.seckill.SeckillStockCache;
 import com.localink.framework.holder.UserHolder;
 import com.localink.mapper.SeckillVoucherMapper;
 import com.localink.mapper.UserMapper;
@@ -78,6 +79,9 @@ class SeckillOrderIntegrationTest {
     private UserMapper userMapper;
 
     @Autowired
+    private SeckillStockCache seckillStockCache;
+
+    @Autowired
     private RedisCache redisCache;
 
     @Autowired
@@ -107,6 +111,7 @@ class SeckillOrderIntegrationTest {
         issuedTokens.forEach(token -> redisCache.delete(keyBuilder.build(KeyManage.USER_TOKEN, token)));
         createdVoucherIds.forEach(id -> {
             voucherOrderMapper.delete(new LambdaQueryWrapper<VoucherOrder>().eq(VoucherOrder::getVoucherId, id));
+            seckillStockCache.evict(id);
             seckillVoucherMapper.delete(new LambdaQueryWrapper<SeckillVoucher>().eq(SeckillVoucher::getVoucherId, id));
             voucherMapper.deleteById(id);
         });

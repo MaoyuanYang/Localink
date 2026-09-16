@@ -55,4 +55,9 @@ public interface RedisCache {
      * ZSet 结构操作。
      */
     RedisZSetOps zsets();
+
+    /**
+     * Lua 脚本执行（多 key 原子操作）。
+     */
+    RedisScriptOps scripts();
 }

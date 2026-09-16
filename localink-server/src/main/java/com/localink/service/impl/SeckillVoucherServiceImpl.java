@@ -7,6 +7,7 @@ import com.localink.common.code.BaseCode;
 import com.localink.common.exception.LocalinkException;
 import com.localink.entity.SeckillVoucher;
 import com.localink.entity.Voucher;
+import com.localink.framework.seckill.SeckillStockCache;
 import com.localink.mapper.SeckillVoucherMapper;
 import com.localink.mapper.VoucherMapper;
 import com.localink.service.SeckillVoucherService;
@@ -29,6 +30,7 @@ public class SeckillVoucherServiceImpl implements SeckillVoucherService {
 
     private final VoucherMapper voucherMapper;
     private final SeckillVoucherMapper seckillVoucherMapper;
+    private final SeckillStockCache seckillStockCache;
 
     @Override
     @Transactional
@@ -53,6 +55,7 @@ public class SeckillVoucherServiceImpl implements SeckillVoucherService {
         seckill.setBeginTime(dto.getBeginTime());
         seckill.setEndTime(dto.getEndTime());
         seckillVoucherMapper.insert(seckill);
+        seckillStockCache.warm(voucher.getId(), dto.getStock(), dto.getEndTime());
         return String.valueOf(voucher.getId());
     }
 
@@ -83,6 +86,7 @@ public class SeckillVoucherServiceImpl implements SeckillVoucherService {
         seckill.setBeginTime(dto.getBeginTime());
         seckill.setEndTime(dto.getEndTime());
         seckillVoucherMapper.updateById(seckill);
+        seckillStockCache.warm(dto.getId(), dto.getStock(), dto.getEndTime());
     }
 
     @Override
@@ -92,6 +96,7 @@ public class SeckillVoucherServiceImpl implements SeckillVoucherService {
         seckillVoucherMapper.delete(
                 new LambdaQueryWrapper<SeckillVoucher>().eq(SeckillVoucher::getVoucherId, voucherId));
         voucherMapper.deleteById(voucherId);
+        seckillStockCache.evict(voucherId);
     }
 
     @Override
