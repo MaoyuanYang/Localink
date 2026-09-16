@@ -39,7 +39,10 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
         requireStock(seckill.getStock());
         requireFirstOrder(voucherId);
 
-        seckillVoucherMapper.deductStock(voucherId);
+        int deducted = seckillVoucherMapper.deductStock(voucherId);
+        if (deducted == 0) {
+            throw new LocalinkException(BaseCode.SECKILL_STOCK_NOT_ENOUGH);
+        }
 
         VoucherOrder order = new VoucherOrder();
         order.setUserId(UserHolder.get().getId());

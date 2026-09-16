@@ -19,3 +19,6 @@ application-local.yml
 application-local.yaml
 application-local.properties
 *.env
+
+# JMeter 本地产出（token/JTL，见 scripts/jmeter/README.md）
+scripts/jmeter/results/
