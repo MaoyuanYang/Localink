@@ -9,6 +9,7 @@ import com.localink.constant.KeyManage;
 import com.localink.entity.SeckillVoucher;
 import com.localink.entity.User;
 import com.localink.entity.VoucherOrder;
+import com.localink.framework.seckill.SeckillStockCache;
 import com.localink.framework.auth.TokenRefreshInterceptor;
 import com.localink.mapper.SeckillVoucherMapper;
 import com.localink.mapper.UserMapper;
@@ -39,6 +40,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class SeckillOrderHttpIntegrationTest {
 
     private static final String PHONE = "13900139010";
+
+    @Autowired
+    private SeckillStockCache seckillStockCache;
 
     @Autowired
     private MockMvc mockMvc;
@@ -79,6 +83,7 @@ class SeckillOrderHttpIntegrationTest {
         issuedTokens.forEach(token -> redisCache.delete(keyBuilder.build(KeyManage.USER_TOKEN, token)));
         createdVoucherIds.forEach(id -> {
             voucherOrderMapper.delete(new LambdaQueryWrapper<VoucherOrder>().eq(VoucherOrder::getVoucherId, id));
+            seckillStockCache.evict(id);
             seckillVoucherMapper.delete(new LambdaQueryWrapper<SeckillVoucher>().eq(SeckillVoucher::getVoucherId, id));
             voucherMapper.deleteById(id);
         });
