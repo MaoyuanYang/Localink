@@ -32,6 +32,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -226,6 +227,53 @@ class SeckillOrderIntegrationTest {
 
         assertEquals(0, seckillVoucherMapper.deductStock(voucherId));
         assertEquals(0, selectSeckill(voucherId).getStock());
+    }
+
+    @Test
+    void concurrentSameUserSeckillYieldsExactlyOneOrder() throws Exception {
+        Long voucherId = createSeckillVoucher(10, 0, LocalDateTime.now().minusHours(1), LocalDateTime.now().plusHours(1));
+        Long userId = UserHolder.get().getId();
+        int threads = 8;
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        try {
+            List<Future<LocalinkException>> futures = new ArrayList<>();
+            CountDownLatch start = new CountDownLatch(1);
+            for (int i = 0; i < threads; i++) {
+                futures.add(pool.submit(() -> {
+                    UserDTO holderUser = new UserDTO();
+                    holderUser.setId(userId);
+                    holderUser.setLevel(0);
+                    UserHolder.set(holderUser);
+                    start.await();
+                    try {
+                        voucherOrderService.seckill(voucherId);
+                        return null;
+                    } catch (LocalinkException e) {
+                        return e;
+                    } finally {
+                        UserHolder.clear();
+                    }
+                }));
+            }
+            start.countDown();
+            int success = 0;
+            int duplicateRejected = 0;
+            for (Future<LocalinkException> future : futures) {
+                LocalinkException e = future.get(30, TimeUnit.SECONDS);
+                if (e == null) {
+                    success++;
+                } else if (Integer.valueOf(BaseCode.SECKILL_DUPLICATE_ORDER.getCode()).equals(e.getCode())) {
+                    duplicateRejected++;
+                }
+            }
+            assertEquals(1, success, "同一用户并发应恰好成交一单");
+            assertEquals(threads - 1, duplicateRejected);
+            assertEquals(1L, voucherOrderMapper.selectCount(new LambdaQueryWrapper<VoucherOrder>()
+                    .eq(VoucherOrder::getVoucherId, voucherId)));
+            assertEquals(9, selectSeckill(voucherId).getStock());
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     @Test

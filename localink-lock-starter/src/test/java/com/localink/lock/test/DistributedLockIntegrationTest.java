@@ -15,6 +15,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -148,6 +149,27 @@ class DistributedLockIntegrationTest {
 
         release.countDown();
         assertTrue(writer.get(5, TimeUnit.SECONDS));
+    }
+
+    @Test
+    void tryWithLockElectsSingleWorkerAndReturnsEmptyWhenHeld() throws Exception {
+        String key = track("test:m35:try-elect");
+        CountDownLatch held = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Future<Optional<String>> worker = pool.submit(() ->
+                distributedLock.tryWithLock(key, LockType.REENTRANT, null, () -> {
+                    held.countDown();
+                    await(release);
+                    return "worker";
+                }));
+        assertTrue(held.await(5, TimeUnit.SECONDS));
+        assertTrue(distributedLock.tryWithLock(key, LockType.REENTRANT, null, () -> "intruder").isEmpty(),
+                "锁被占用时 tryWithLock 应立即返回 empty");
+
+        release.countDown();
+        assertEquals(Optional.of("worker"), worker.get(5, TimeUnit.SECONDS));
+        assertTrue(distributedLock.tryWithLock(key, LockType.REENTRANT, null, () -> "next").isPresent(),
+                "释放后应可再次获取");
     }
 
     private String track(String key) {

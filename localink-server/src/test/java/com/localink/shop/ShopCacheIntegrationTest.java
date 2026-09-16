@@ -137,6 +137,20 @@ class ShopCacheIntegrationTest {
         fail("等待缓存重建超时, 期望 name=" + expectedName + ", 实际=" + (entry == null || entry.getData() == null ? "null" : entry.getData().getName()));
     }
 
+    /**
+     * 异步重建后排队选举任务依次拿锁再释放，锁 key 存在瞬态窗口——有界轮询断言"最终无泄漏"。
+     */
+    private void awaitLockReleased(Long id) throws InterruptedException {
+        long deadline = System.currentTimeMillis() + 5000;
+        while (System.currentTimeMillis() < deadline) {
+            if (!redisCache.hasKey(keyBuilder.build(KeyManage.SHOP_REBUILD_LOCK, id))) {
+                return;
+            }
+            Thread.sleep(100);
+        }
+        fail("异步重建排干后重建锁应已释放");
+    }
+
     @Test
     void detailMissFillsCacheWithLogicalExpiry() {
         Long id = Long.valueOf(shopService.create(newDto()));
@@ -336,7 +350,7 @@ class ShopCacheIntegrationTest {
         assertTrue(names.contains(staleName), "应有请求拿到旧值兜底");
         awaitEntryName(id, freshName);
         verify(shopMapper, times(2)).selectById(id);
-        assertFalse(redisCache.hasKey(keyBuilder.build(KeyManage.SHOP_REBUILD_LOCK, id)), "异步重建完成后锁应已释放");
+        awaitLockReleased(id);
     }
 
     @Test
