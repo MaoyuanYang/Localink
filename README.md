@@ -76,4 +76,4 @@ curl http://localhost:8086/ping   # -> pong
 
 ## 开发状态
 
-M0 工程奠基与 M1 基础业务闭环（单库）已全部完成（2026-08-18），M2 缓存体系已收官（M2.1～M2.10 全部完成，2026-09-11；读链路最终形态：Caffeine 本地缓存 → 布隆 → Redis 逻辑过期 → DB 四级纵深）。M3 秒杀核心链路进行中：M3.1 纯 DB 下单 V1、M3.2 JMeter 压测实录竞态 + 乐观锁修复（500 归零，纯 DB 基线 QPS 88.8/s / P99 1461ms）、M3.3+M3.4 分布式锁框架（RedissonClient 互让装配、四种锁命令式工具、@ServiceLock 注解 + SpEL + AOP，8 个集成测试）已落地（2026-09-16）。完整进度见 [docs/roadmap.md](docs/roadmap.md)。
+M0 工程奠基与 M1 基础业务闭环（单库）已全部完成（2026-08-18），M2 缓存体系已收官（M2.1～M2.10 全部完成，2026-09-11；读链路最终形态：Caffeine 本地缓存 → 布隆 → Redis 逻辑过期 → DB 四级纵深）。M3 秒杀核心链路进行中（4/15）：M3.1 纯 DB 下单 V1、M3.2 JMeter 压测实录竞态 + 乐观锁修复（500 归零，纯 DB 基线 QPS 88.8/s / P99 1461ms）、M3.3+M3.4 分布式锁框架（四种锁 + @ServiceLock 注解）、M3.5 一人一单升级（用户维度 @ServiceLock + 生成列条件唯一索引兜底，同用户并发实录 10 单 → 1 单，QPS 几乎无损；SHOP_REBUILD_LOCK 自研锁退役）已落地（2026-09-16）。完整进度见 [docs/roadmap.md](docs/roadmap.md)。
