@@ -29,6 +29,7 @@ public enum BaseCode {
     FORBIDDEN(40003, "无访问权限"),
     NOT_FOUND(40004, "资源不存在"),
     LOCK_TIMEOUT(40005, "操作繁忙，请稍后重试"),
+    MQ_SEND_FAILED(40006, "消息发送失败"),
 
     SHOP_TYPE_IN_USE(50001, "该类型下仍有商户，无法删除");
 
