@@ -1,6 +1,7 @@
 package com.localink.lock;
 
 import java.time.Duration;
+import java.util.Optional;
 import java.util.function.Supplier;
 
 /**
@@ -30,4 +31,10 @@ public interface DistributedLock {
             return null;
         });
     }
+
+    /**
+     * 立即尝试拿锁执行（不等待）：锁被占用时返回 Optional.empty()，用于"选一个 worker"场景
+     * （如缓存异步重建选举、延迟队列消费抢占）。leaseTime 传 null 或非正数走看门狗。
+     */
+    <T> Optional<T> tryWithLock(String key, LockType type, Duration leaseTime, Supplier<T> action);
 }

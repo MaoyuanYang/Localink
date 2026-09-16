@@ -82,6 +82,7 @@ public class VoucherServiceImpl implements VoucherService {
         VoucherOrder order = new VoucherOrder();
         order.setUserId(UserHolder.get().getId());
         order.setVoucherId(voucherId);
+        order.setVoucherType(TYPE_NORMAL);
         order.setStatus(ORDER_STATUS_CREATED);
         order.setReconciliationStatus(RECONCILIATION_PENDING);
         voucherOrderMapper.insert(order);

@@ -8,6 +8,7 @@ import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 
 import java.time.Duration;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
@@ -36,6 +37,30 @@ public class RedissonDistributedLock implements DistributedLock {
         }
         try {
             return action.get();
+        } finally {
+            if (lock.isHeldByCurrentThread()) {
+                lock.unlock();
+            }
+        }
+    }
+
+    @Override
+    public <T> Optional<T> tryWithLock(String key, LockType type, Duration leaseTime, Supplier<T> action) {
+        RLock lock = resolve(key, type);
+        boolean locked;
+        try {
+            locked = leaseTime == null || leaseTime.isNegative() || leaseTime.isZero()
+                    ? lock.tryLock()
+                    : lock.tryLock(0, leaseTime.toMillis(), TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new LocalinkException(BaseCode.LOCK_TIMEOUT, "获取锁等待被中断");
+        }
+        if (!locked) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.ofNullable(action.get());
         } finally {
             if (lock.isHeldByCurrentThread()) {
                 lock.unlock();

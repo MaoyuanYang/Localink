@@ -124,13 +124,15 @@ CREATE TABLE `lk_voucher_order` (
     `id`                  bigint unsigned NOT NULL COMMENT '主键，即订单ID（雪花）',
     `user_id`             bigint unsigned NOT NULL COMMENT '下单用户',
     `voucher_id`          bigint unsigned NOT NULL COMMENT '购买的券',
+    `voucher_type`        tinyint unsigned NOT NULL DEFAULT 1 COMMENT '券类型冗余（1普通/2秒杀，写入时从 lk_voucher 冗余；秒杀条件唯一索引判据）',
     `status`              tinyint unsigned NOT NULL DEFAULT 1 COMMENT '1已创建/2用户取消/3超时关闭',
     `reconciliation_status` tinyint unsigned NOT NULL DEFAULT 1 COMMENT '对账状态 1待处理/2异常/3不一致/4一致',
     `create_time`         datetime        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '下单时间',
     `close_time`          datetime                 DEFAULT NULL COMMENT '关闭时间（取消/超时关闭时写入）',
     `update_time`         datetime        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `active_flag`         tinyint unsigned GENERATED ALWAYS AS (IF(`voucher_type` = 2 AND `status` = 1, 1, NULL)) VIRTUAL COMMENT '秒杀活跃订单标记（秒杀+已创建为 1，其余 NULL；MySQL 唯一索引忽略 NULL——已取消/关闭订单不占位可再抢，普通券不参与一人一单）',
     PRIMARY KEY (`id`),
-    KEY `idx_user_id` (`user_id`),
+    UNIQUE KEY `uk_user_voucher_active` (`user_id`, `voucher_id`, `active_flag`),
     KEY `idx_voucher_id` (`voucher_id`)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4

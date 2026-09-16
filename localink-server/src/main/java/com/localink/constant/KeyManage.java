@@ -31,10 +31,11 @@ public enum KeyManage implements KeyTemplate {
     SHOP_INFO("shop:info:%s", null, "商户ID→商户详情缓存（String JSON，M2.7 逻辑过期格式 LogicalExpiryEntry{data,expireTime}，无物理 TTL，逻辑过期后异步重建旧值兜底；空值缓存复用本 key：空串标记+短物理TTL 带随机抖动）"),
 
     /**
-     * 商户 ID → 缓存重建互斥锁（值固定 "1"，SET NX EX 原子抢锁 + DEL 释放）。
-     * 自研简单锁：无持有者标识，业务执行超过锁 TTL 时释放会误删他人锁——留待 M3.3 Redisson 演进。
+     * 商户 ID → 缓存重建互斥锁。
+     * M3.5 起实现由自研 SET NX EX 简单锁换为 Redisson 可重入锁 + 看门狗（经 DistributedLock 命令式调用，
+     * key 仍由 KeyBuilder 生成）：释放有持有者校验、重建全程自动续期，根治"业务超时锁过期误删"。
      */
-    SHOP_REBUILD_LOCK("shop:rebuild:lock:%s", Duration.ofSeconds(10), "商户缓存重建互斥锁（SET NX EX 自研简单锁，锁超时兜底防死锁）"),
+    SHOP_REBUILD_LOCK("shop:rebuild:lock:%s", null, "商户缓存重建互斥锁（Redisson 可重入锁+看门狗，M3.5 起替换自研简单锁；同步重建 wait 3s，异步选举 tryWithLock）"),
 
     /**
      * 商户 ID 布隆过滤器（Redisson RBloomFilter 位图 + {key}:config 参数哈希，无 TTL 跨重启保留）。
@@ -42,7 +43,14 @@ public enum KeyManage implements KeyTemplate {
      * 布隆不可删除：delete 商户后仍会通过布隆，落到空值缓存路径兜底（拦"曾经存在"）。
      * 模板与 application.yml 的 localink.cache.bloom.filters.shop.key-template 镜像，KeyManageTest 契约锁定。
      */
-    SHOP_BLOOM("shop:bloom:id", null, "商户ID布隆过滤器（Redisson RBloomFilter，防穿透第一层：拦'从未存在'；无TTL，启动全量灌+create同步add，不可删→空值缓存兜底'曾经存在'）");
+    SHOP_BLOOM("shop:bloom:id", null, "商户ID布隆过滤器（Redisson RBloomFilter，防穿透第一层：拦'从未存在'；无TTL，启动全量灌+create同步add，不可删→空值缓存兜底'曾经存在'）"),
+
+    /**
+     * 用户 ID → 秒杀一人一单分布式锁（Redisson 可重入锁 + 看门狗）。
+     * M3.5 经 @ServiceLock(name="seckill:order", key=用户ID) 生成，实际 key = lk: + 本模板——
+     * 注解值必须是编译期常量，无法引用枚举，故此处登记仅作文档对齐与 redis-cli 观测入口，不经 KeyBuilder 构建。
+     */
+    SECKILL_ORDER_LOCK("lock:seckill:order:%s", null, "秒杀一人一单用户维度锁（Redisson 可重入+看门狗；@ServiceLock 生成 lk:lock:seckill:order:{userId}，此处登记为文档对齐）");
 
     private final String template;
     private final Duration ttl;
