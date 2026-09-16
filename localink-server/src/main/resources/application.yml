@@ -46,6 +46,11 @@ mybatis-plus:
     map-underscore-to-camel-case: true
 
 localink:
+  mq:
+    topics:
+      seckill-order:
+        partitions: 3
+        replicas: 1
   cache:
     bloom:
       filters:

@@ -1,6 +1,7 @@
 package com.localink.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.localink.cache.RedisCache;
 import com.localink.common.code.BaseCode;
 import com.localink.common.exception.LocalinkException;
@@ -12,6 +13,9 @@ import com.localink.framework.seckill.SeckillStockCache;
 import com.localink.mapper.SeckillVoucherMapper;
 import com.localink.mapper.VoucherMapper;
 import com.localink.mapper.VoucherOrderMapper;
+import com.localink.mq.MessageProducer;
+import com.localink.mq.MqTopics;
+import com.localink.mq.SeckillOrderMessage;
 import com.localink.service.VoucherOrderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -46,9 +50,9 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
     private final SeckillStockCache seckillStockCache;
     private final RedisScript<Long> seckillDeductScript;
     private final RedisScript<Long> seckillRollbackScript;
+    private final MessageProducer messageProducer;
 
     @Override
-    @Transactional
     public String seckill(Long voucherId) {
         Voucher voucher = requireSeckillVoucher(voucherId);
         SeckillVoucher seckill = requireOpenSeckill(voucherId);
@@ -56,17 +60,51 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
         Long userId = UserHolder.get().getId();
 
         deductInRedis(voucherId, userId, seckill.getEndTime());
+
+        long orderId = IdWorker.getId();
+        SeckillOrderMessage message =
+                new SeckillOrderMessage(orderId, voucherId, voucher.getType(), userId);
         try {
-            return createOrderInDb(voucher, userId);
+            messageProducer.sendSync(MqTopics.SECKILL_ORDER, String.valueOf(voucherId), message);
         } catch (RuntimeException e) {
             rollbackRedis(voucherId, userId);
             throw e;
         }
+        return String.valueOf(orderId);
     }
 
     /**
-     * Lua 原子完成"库存判定 + 一人一单判重 + 扣减"——单线程执行无并发缝隙，
-     * M3.5 的用户维度锁与库存/重复的 DB 前置查询在此被整体取代。
+     * 消费端建单：orderId 守卫挡重复投递（at-least-once 下的 effectively-once）；
+     * CAS 与唯一索引保留为 Redis/DB 短暂不一致时的兜底。
+     */
+    @Override
+    @Transactional
+    public void createSeckillOrder(SeckillOrderMessage message) {
+        if (voucherOrderMapper.selectById(message.orderId()) != null) {
+            log.info("重复投递的建单消息已忽略, orderId={}", message.orderId());
+            return;
+        }
+        int deducted = seckillVoucherMapper.deductStock(message.voucherId());
+        if (deducted == 0) {
+            throw new LocalinkException(BaseCode.SECKILL_STOCK_NOT_ENOUGH,
+                    "Redis 已扣减但 DB 库存不足, orderId=" + message.orderId());
+        }
+        VoucherOrder order = new VoucherOrder();
+        order.setId(message.orderId());
+        order.setUserId(message.userId());
+        order.setVoucherId(message.voucherId());
+        order.setVoucherType(message.voucherType());
+        order.setStatus(ORDER_STATUS_CREATED);
+        order.setReconciliationStatus(RECONCILIATION_PENDING);
+        try {
+            voucherOrderMapper.insert(order);
+        } catch (DuplicateKeyException e) {
+            log.info("唯一索引拦截重复建单（守卫与插入间隙的竞态）, orderId={}", message.orderId());
+        }
+    }
+
+    /**
+     * Lua 原子完成"库存判定 + 一人一单判重 + 扣减"——单线程执行无并发缝隙。
      */
     private void deductInRedis(Long voucherId, Long userId, LocalDateTime endTime) {
         String ttlSeconds = String.valueOf(Math.max(1,
@@ -91,30 +129,8 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
     }
 
     /**
-     * DB 侧仅剩兜底双保险：CAS 扣减（Redis/DB 短暂不一致时拦数字超卖）+ 条件唯一索引拦重复单。
-     */
-    private String createOrderInDb(Voucher voucher, Long userId) {
-        int deducted = seckillVoucherMapper.deductStock(voucher.getId());
-        if (deducted == 0) {
-            throw new LocalinkException(BaseCode.SECKILL_STOCK_NOT_ENOUGH);
-        }
-        VoucherOrder order = new VoucherOrder();
-        order.setUserId(userId);
-        order.setVoucherId(voucher.getId());
-        order.setVoucherType(voucher.getType());
-        order.setStatus(ORDER_STATUS_CREATED);
-        order.setReconciliationStatus(RECONCILIATION_PENDING);
-        try {
-            voucherOrderMapper.insert(order);
-        } catch (DuplicateKeyException e) {
-            throw new LocalinkException(BaseCode.SECKILL_DUPLICATE_ORDER);
-        }
-        return String.valueOf(order.getId());
-    }
-
-    /**
-     * Lua 已扣 Redis 而 DB 建单失败时的逆向补偿（INCRBY 加回 + SREM 移除，幂等）。
-     * 补偿自身失败只记日志，差异留给 M3.12 对账兜底。
+     * 请求路径的即时补偿：Lua 已扣 Redis 但消息发送失败时逆向回加（幂等）。
+     * 消费端失败的回滚属 M3.11（重试耗尽才回滚才正确），对账兜底属 M3.12。
      */
     private void rollbackRedis(Long voucherId, Long userId) {
         try {
