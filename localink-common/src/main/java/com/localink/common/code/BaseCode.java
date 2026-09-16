@@ -13,6 +13,11 @@ public enum BaseCode {
     SUCCESS(0, "成功"),
 
     VOUCHER_NOT_AVAILABLE(10001, "该券暂不可领取"),
+    SECKILL_NOT_STARTED(10002, "秒杀尚未开始"),
+    SECKILL_ENDED(10003, "秒杀已结束"),
+    SECKILL_STOCK_NOT_ENOUGH(10004, "库存不足"),
+    SECKILL_DUPLICATE_ORDER(10005, "每人限购一单"),
+    SECKILL_LEVEL_NOT_ENOUGH(10006, "会员等级不满足抢购条件"),
 
     SMS_SEND_TOO_FREQUENT(20001, "请勿频繁获取验证码"),
     SMS_CODE_INVALID(20002, "验证码错误"),
