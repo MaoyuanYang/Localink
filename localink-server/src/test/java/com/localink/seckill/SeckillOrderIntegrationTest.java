@@ -32,6 +32,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -80,6 +84,7 @@ class SeckillOrderIntegrationTest {
 
     private final List<Long> createdVoucherIds = new ArrayList<>();
     private final List<String> issuedTokens = new ArrayList<>();
+    private final List<String> createdRacePhones = new ArrayList<>();
 
     @BeforeEach
     void loginAndSetHolder() {
@@ -105,6 +110,8 @@ class SeckillOrderIntegrationTest {
             voucherMapper.deleteById(id);
         });
         userMapper.delete(new LambdaQueryWrapper<User>().eq(User::getPhone, PHONE));
+        createdRacePhones.forEach(phone ->
+                userMapper.delete(new LambdaQueryWrapper<User>().eq(User::getPhone, phone)));
     }
 
     @Test
@@ -208,6 +215,65 @@ class SeckillOrderIntegrationTest {
         LocalinkException ex = assertThrows(LocalinkException.class, () -> voucherOrderService.seckill(voucherId));
         assertEquals(BaseCode.VOUCHER_NOT_AVAILABLE.getCode(), ex.getCode());
         assertEquals(10, selectSeckill(voucherId).getStock());
+    }
+
+    @Test
+    void deductStockGuardReturnsZeroWhenStockEmpty() {
+        Long voucherId = createSeckillVoucher(1, 0, LocalDateTime.now().minusHours(1), LocalDateTime.now().plusHours(1));
+
+        assertEquals(1, seckillVoucherMapper.deductStock(voucherId));
+        assertEquals(0, selectSeckill(voucherId).getStock());
+
+        assertEquals(0, seckillVoucherMapper.deductStock(voucherId));
+        assertEquals(0, selectSeckill(voucherId).getStock());
+    }
+
+    @Test
+    void concurrentSeckillOnLastStockDeductsExactlyOnce() throws Exception {
+        Long voucherId = createSeckillVoucher(1, 0, LocalDateTime.now().minusHours(1), LocalDateTime.now().plusHours(1));
+        int threads = 8;
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        try {
+            List<Future<LocalinkException>> futures = new ArrayList<>();
+            for (int i = 0; i < threads; i++) {
+                User user = new User();
+                user.setPhone("1390013920" + i);
+                user.setNickName("M3.2并发用户" + i);
+                userMapper.insert(user);
+                createdRacePhones.add(user.getPhone());
+                futures.add(pool.submit(() -> {
+                    UserDTO holderUser = new UserDTO();
+                    holderUser.setId(user.getId());
+                    holderUser.setLevel(0);
+                    UserHolder.set(holderUser);
+                    try {
+                        voucherOrderService.seckill(voucherId);
+                        return null;
+                    } catch (LocalinkException e) {
+                        return e;
+                    } finally {
+                        UserHolder.clear();
+                    }
+                }));
+            }
+            int success = 0;
+            int stockRejected = 0;
+            for (Future<LocalinkException> future : futures) {
+                LocalinkException e = future.get(30, TimeUnit.SECONDS);
+                if (e == null) {
+                    success++;
+                } else if (Integer.valueOf(BaseCode.SECKILL_STOCK_NOT_ENOUGH.getCode()).equals(e.getCode())) {
+                    stockRejected++;
+                }
+            }
+            assertEquals(1, success);
+            assertEquals(threads - 1, stockRejected);
+            assertEquals(0, selectSeckill(voucherId).getStock());
+            assertEquals(1L, voucherOrderMapper.selectCount(new LambdaQueryWrapper<VoucherOrder>()
+                    .eq(VoucherOrder::getVoucherId, voucherId)));
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     private Long createSeckillVoucher(int stock, int minLevel, LocalDateTime begin, LocalDateTime end) {
