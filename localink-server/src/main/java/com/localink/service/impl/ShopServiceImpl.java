@@ -18,6 +18,8 @@ import com.localink.constant.KeyManage;
 import com.localink.entity.Shop;
 import com.localink.framework.cache.LogicalExpiryEntry;
 import com.localink.cache.LocalCache;
+import com.localink.lock.DistributedLock;
+import com.localink.lock.LockType;
 import com.localink.mapper.ShopMapper;
 import com.localink.service.ShopService;
 import lombok.RequiredArgsConstructor;
@@ -40,9 +42,7 @@ public class ShopServiceImpl implements ShopService {
     private static final Duration SHOP_LOGICAL_TTL_JITTER = Duration.ofMinutes(10);
     private static final Duration SHOP_NULL_CACHE_TTL = Duration.ofMinutes(2);
     private static final Duration SHOP_NULL_TTL_JITTER = Duration.ofSeconds(30);
-    private static final Duration SHOP_REBUILD_LOCK_TTL = Duration.ofSeconds(10);
-    private static final int REBUILD_RETRY_LIMIT = 50;
-    private static final long REBUILD_RETRY_INTERVAL_MS = 50;
+    private static final Duration SHOP_REBUILD_LOCK_WAIT = Duration.ofSeconds(3);
     private static final Type SHOP_ENTRY_TYPE = new TypeReference<LogicalExpiryEntry<ShopVO>>() {}.getType();
 
     private final ShopMapper shopMapper;
@@ -51,6 +51,7 @@ public class ShopServiceImpl implements ShopService {
     private final ThreadPoolTaskExecutor cacheRebuildExecutor;
     private final BloomFilterRegistry bloomFilterRegistry;
     private final LocalCache<String, ShopVO> shopLocalCache;
+    private final DistributedLock distributedLock;
 
     @Override
     public ShopVO detail(Long id) {
@@ -90,52 +91,43 @@ public class ShopServiceImpl implements ShopService {
     }
 
     private void triggerAsyncRebuild(Long id, KeyBuild key) {
-        KeyBuild lockKey = keyBuilder.build(KeyManage.SHOP_REBUILD_LOCK, id);
-        if (!redisCache.strings().setIfAbsent(lockKey, "1", SHOP_REBUILD_LOCK_TTL)) {
-            return;
-        }
         cacheRebuildExecutor.execute(() -> {
             try {
-                LogicalExpiryEntry<ShopVO> current = parseEntry(redisCache.strings().getString(key));
-                if (current != null && current.getExpireTime() != null
-                        && current.getExpireTime().isAfter(LocalDateTime.now())) {
+                if (isEntryFresh(key)) {
                     return;
                 }
-                loadAndCacheLogical(id, key);
+                distributedLock.tryWithLock(rebuildLockKey(id), LockType.REENTRANT, null, () -> {
+                    if (isEntryFresh(key)) {
+                        return null;
+                    }
+                    loadAndCacheLogical(id, key);
+                    return null;
+                });
             } catch (Exception e) {
                 log.error("商户缓存异步重建失败, shopId={}", id, e);
-            } finally {
-                redisCache.delete(lockKey);
             }
         });
     }
 
+    private boolean isEntryFresh(KeyBuild key) {
+        LogicalExpiryEntry<ShopVO> current = parseEntry(redisCache.strings().getString(key));
+        return current != null && current.getExpireTime() != null
+                && current.getExpireTime().isAfter(LocalDateTime.now());
+    }
+
     private ShopVO rebuildWithMutex(Long id, KeyBuild key) {
-        KeyBuild lockKey = keyBuilder.build(KeyManage.SHOP_REBUILD_LOCK, id);
-        for (int attempt = 0; attempt < REBUILD_RETRY_LIMIT; attempt++) {
-            ShopVO cached = resolveFilled(redisCache.strings().getString(key));
-            if (cached != null) {
-                return cached;
-            }
-            if (redisCache.strings().setIfAbsent(lockKey, "1", SHOP_REBUILD_LOCK_TTL)) {
-                try {
-                    cached = resolveFilled(redisCache.strings().getString(key));
-                    if (cached != null) {
-                        return cached;
-                    }
-                    return loadAndCacheLogical(id, key);
-                } finally {
-                    redisCache.delete(lockKey);
-                }
-            }
-            try {
-                Thread.sleep(REBUILD_RETRY_INTERVAL_MS);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new LocalinkException(BaseCode.SYSTEM_ERROR, "缓存重建等待被中断");
-            }
+        ShopVO cached = resolveFilled(redisCache.strings().getString(key));
+        if (cached != null) {
+            return cached;
         }
-        throw new LocalinkException(BaseCode.SYSTEM_ERROR, "缓存重建繁忙，请稍后再试");
+        return distributedLock.runWithLock(rebuildLockKey(id), LockType.REENTRANT, SHOP_REBUILD_LOCK_WAIT, null, () -> {
+            ShopVO rechecked = resolveFilled(redisCache.strings().getString(key));
+            return rechecked != null ? rechecked : loadAndCacheLogical(id, key);
+        });
+    }
+
+    private String rebuildLockKey(Long id) {
+        return keyBuilder.build(KeyManage.SHOP_REBUILD_LOCK, id).getKey();
     }
 
     private ShopVO resolveFilled(String raw) {
