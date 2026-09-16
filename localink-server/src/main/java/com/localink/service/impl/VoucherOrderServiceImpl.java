@@ -7,11 +7,13 @@ import com.localink.entity.SeckillVoucher;
 import com.localink.entity.Voucher;
 import com.localink.entity.VoucherOrder;
 import com.localink.framework.holder.UserHolder;
+import com.localink.lock.annotation.ServiceLock;
 import com.localink.mapper.SeckillVoucherMapper;
 import com.localink.mapper.VoucherMapper;
 import com.localink.mapper.VoucherOrderMapper;
 import com.localink.service.VoucherOrderService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,9 +33,10 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
     private final VoucherOrderMapper voucherOrderMapper;
 
     @Override
+    @ServiceLock(name = "seckill:order", key = "T(com.localink.framework.holder.UserHolder).get().id")
     @Transactional
     public String seckill(Long voucherId) {
-        requireSeckillVoucher(voucherId);
+        Voucher voucher = requireSeckillVoucher(voucherId);
         SeckillVoucher seckill = requireOpenSeckill(voucherId);
         requireUserLevel(seckill.getMinLevel());
         requireStock(seckill.getStock());
@@ -47,13 +50,18 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
         VoucherOrder order = new VoucherOrder();
         order.setUserId(UserHolder.get().getId());
         order.setVoucherId(voucherId);
+        order.setVoucherType(voucher.getType());
         order.setStatus(ORDER_STATUS_CREATED);
         order.setReconciliationStatus(RECONCILIATION_PENDING);
-        voucherOrderMapper.insert(order);
+        try {
+            voucherOrderMapper.insert(order);
+        } catch (DuplicateKeyException e) {
+            throw new LocalinkException(BaseCode.SECKILL_DUPLICATE_ORDER);
+        }
         return String.valueOf(order.getId());
     }
 
-    private void requireSeckillVoucher(Long voucherId) {
+    private Voucher requireSeckillVoucher(Long voucherId) {
         Voucher voucher = voucherMapper.selectById(voucherId);
         if (voucher == null) {
             throw new LocalinkException(BaseCode.NOT_FOUND, "秒杀券不存在");
@@ -64,6 +72,7 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
         if (voucher.getStatus() == null || voucher.getStatus() != STATUS_ON_SHELF) {
             throw new LocalinkException(BaseCode.VOUCHER_NOT_AVAILABLE);
         }
+        return voucher;
     }
 
     private SeckillVoucher requireOpenSeckill(Long voucherId) {

@@ -177,15 +177,17 @@ erDiagram
 | id | bigint unsigned | NO | 雪花 | 主键，即订单 ID（对外 orderId） |
 | user_id | bigint unsigned | NO | | 下单用户 |
 | voucher_id | bigint unsigned | NO | | 购买的券 |
+| voucher_type | tinyint unsigned | NO | 1 | 券类型冗余（1 普通 / 2 秒杀），写入时从 lk_voucher 冗余；秒杀条件唯一索引判据 |
 | status | tinyint unsigned | NO | 1 | 1 已创建 / 2 用户取消 / 3 超时关闭（系统取消） |
 | reconciliation_status | tinyint unsigned | NO | 1 | 对账状态：1 待处理 / 2 异常 / 3 不一致 / 4 一致（M3.12 起维护） |
 | create_time | datetime | NO | CURRENT_TIMESTAMP | 下单时间 |
 | close_time | datetime | YES | NULL | 关闭时间（取消/超时关闭时写入） |
 | update_time | datetime | NO | CURRENT_TIMESTAMP ON UPDATE | |
+| active_flag | tinyint unsigned（生成列） | YES | 计算值 | `IF(voucher_type=2 AND status=1, 1, NULL)` VIRTUAL；仅"秒杀活跃订单"为 1 |
 
-索引：`PRIMARY KEY(id)`、`KEY idx_user_id(user_id)`（我的订单）、`KEY idx_voucher_id(voucher_id)`（按券统计）。
+索引：`PRIMARY KEY(id)`、`UNIQUE KEY uk_user_voucher_active(user_id, voucher_id, active_flag)`（M3.5 一人一单兜底；最左前缀覆盖"我的订单"查询，替代原 idx_user_id）、`KEY idx_voucher_id(voucher_id)`（按券统计）。
 
-**一人一单唯一索引不在 M1 建立**：秒杀一人一单先由 Lua/分布式锁保障（M3.1~M3.6），M3.5 再评估唯一索引兜底方案（需处理"取消后再抢"语义），属演进设计的一环。
+**一人一单条件唯一索引（M3.5 建立）**：MySQL 唯一索引对 NULL 不去重——生成列 active_flag 让"秒杀 + 已创建"订单（=1）每 (user, voucher) 唯一，而取消/超时关闭订单（NULL）不占位、允许再抢，普通券订单（NULL）不参与一人一单、允许重复领取。这是 M1 设计伏笔（"取消后再抢"语义）在 M3.5 的兑现；应用层在锁失效的竞态缝隙里撞上索引时，DuplicateKeyException 转译为 10005 优雅拒绝。
 
 ### 4.7 lk_post（帖子表）
 

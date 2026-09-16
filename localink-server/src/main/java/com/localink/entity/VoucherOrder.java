@@ -18,6 +18,11 @@ public class VoucherOrder {
 
     private Long voucherId;
 
+    /**
+     * 券类型冗余（1 普通 / 2 秒杀）：秒杀"一人一单"条件唯一索引的判据。
+     */
+    private Integer voucherType;
+
     private Integer status;
 
     private Integer reconciliationStatus;
