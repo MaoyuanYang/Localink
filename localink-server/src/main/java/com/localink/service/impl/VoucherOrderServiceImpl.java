@@ -10,6 +10,7 @@ import com.localink.entity.Voucher;
 import com.localink.entity.VoucherOrder;
 import com.localink.framework.holder.UserHolder;
 import com.localink.framework.seckill.SeckillStockCache;
+import com.localink.idempotent.RepeatExecuteLimit;
 import com.localink.mapper.SeckillVoucherMapper;
 import com.localink.mapper.VoucherMapper;
 import com.localink.mapper.VoucherOrderMapper;
@@ -74,16 +75,13 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
     }
 
     /**
-     * 消费端建单：orderId 守卫挡重复投递（at-least-once 下的 effectively-once）；
-     * CAS 与唯一索引保留为 Redis/DB 短暂不一致时的兜底。
+     * 消费端建单：@RepeatExecuteLimit 以 orderId 为幂等键挡重复投递（标记快路径 → 唯一索引终审；
+     * 标记写在事务提交后，回滚的执行不落标记、重投会重试）。CAS 与唯一索引保留为标记丢失时的兜底。
      */
     @Override
+    @RepeatExecuteLimit(name = "seckill-order", key = "#message.orderId()")
     @Transactional
     public void createSeckillOrder(SeckillOrderMessage message) {
-        if (voucherOrderMapper.selectById(message.orderId()) != null) {
-            log.info("重复投递的建单消息已忽略, orderId={}", message.orderId());
-            return;
-        }
         int deducted = seckillVoucherMapper.deductStock(message.voucherId());
         if (deducted == 0) {
             throw new LocalinkException(BaseCode.SECKILL_STOCK_NOT_ENOUGH,

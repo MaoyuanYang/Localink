@@ -3,6 +3,9 @@ package com.localink.cache;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.localink.api.dto.ShopDTO;
 import com.localink.constant.LocalCacheAlias;
+import com.localink.cache.KeyBuilder;
+import com.localink.cache.RedisCache;
+import com.localink.constant.KeyManage;
 import com.localink.entity.Shop;
 import com.localink.mapper.ShopMapper;
 import com.localink.mq.CacheInvalidationMessage;
@@ -46,6 +49,12 @@ class CacheInvalidationBroadcastIntegrationTest {
     @Autowired
     private MessageProducer messageProducer;
 
+    @Autowired
+    private RedisCache redisCache;
+
+    @Autowired
+    private KeyBuilder keyBuilder;
+
     @SpyBean
     private MessageProducer messageProducerSpy;
 
@@ -56,6 +65,7 @@ class CacheInvalidationBroadcastIntegrationTest {
         createdIds.forEach(id -> {
             shopMapper.deleteById(id);
             shopLocalCache.invalidate(String.valueOf(id));
+            redisCache.delete(keyBuilder.build(KeyManage.SHOP_INFO, id));
         });
     }
 
