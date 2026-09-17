@@ -46,6 +46,13 @@ mybatis-plus:
     map-underscore-to-camel-case: true
 
 localink:
+  seckill:
+    consume:
+      max-stale-ms: 10000
+      max-attempts: 4
+      backoff-initial-ms: 200
+      backoff-multiplier: 2
+      backoff-max-ms: 1000
   mq:
     topics:
       seckill-order:
