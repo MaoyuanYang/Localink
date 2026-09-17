@@ -31,6 +31,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -109,6 +110,7 @@ class SeckillOrderHttpIntegrationTest {
                 .andExpect(jsonPath("$.code").value(BaseCode.SUCCESS.getCode()))
                 .andExpect(jsonPath("$.data").isNotEmpty());
 
+        assertTrue(OrderAwait.awaitCountByVoucher(voucherOrderMapper, voucherId, 1), "异步建单应在窗口内落库");
         VoucherOrder order = voucherOrderMapper.selectOne(new LambdaQueryWrapper<VoucherOrder>()
                 .eq(VoucherOrder::getUserId, user.getId())
                 .eq(VoucherOrder::getVoucherId, voucherId));

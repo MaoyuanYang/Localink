@@ -42,6 +42,7 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest
 class SeckillOrderIntegrationTest {
@@ -121,14 +122,14 @@ class SeckillOrderIntegrationTest {
     }
 
     @Test
-    void seckillCreatesOrderAndDecrementsStock() {
+    void seckillCreatesOrderAndDecrementsStock() throws Exception {
         UserHolder.get().setLevel(2);
         Long voucherId = createSeckillVoucher(10, 1, LocalDateTime.now().minusHours(1), LocalDateTime.now().plusHours(1));
 
         String orderId = voucherOrderService.seckill(voucherId);
 
-        VoucherOrder order = voucherOrderMapper.selectById(Long.valueOf(orderId));
-        assertNotNull(order);
+        VoucherOrder order = OrderAwait.awaitById(voucherOrderMapper, Long.valueOf(orderId));
+        assertNotNull(order, "异步建单应在窗口内落库");
         assertEquals(UserHolder.get().getId(), order.getUserId());
         assertEquals(voucherId, order.getVoucherId());
         assertEquals(ORDER_STATUS_CREATED, order.getStatus());
@@ -161,9 +162,10 @@ class SeckillOrderIntegrationTest {
     }
 
     @Test
-    void seckillRejectedWhenStockExhausted() {
+    void seckillRejectedWhenStockExhausted() throws Exception {
         Long voucherId = createSeckillVoucher(1, 0, LocalDateTime.now().minusHours(1), LocalDateTime.now().plusHours(1));
         voucherOrderService.seckill(voucherId);
+        assertTrue(OrderAwait.awaitCountByVoucher(voucherOrderMapper, voucherId, 1), "首单应异步落库");
 
         LocalinkException ex = assertThrows(LocalinkException.class, () -> voucherOrderService.seckill(voucherId));
         assertEquals(BaseCode.SECKILL_STOCK_NOT_ENOUGH.getCode(), ex.getCode());
@@ -171,9 +173,10 @@ class SeckillOrderIntegrationTest {
     }
 
     @Test
-    void seckillRejectedForDuplicateOrder() {
+    void seckillRejectedForDuplicateOrder() throws Exception {
         Long voucherId = createSeckillVoucher(10, 0, LocalDateTime.now().minusHours(1), LocalDateTime.now().plusHours(1));
         voucherOrderService.seckill(voucherId);
+        assertTrue(OrderAwait.awaitCountByVoucher(voucherOrderMapper, voucherId, 1), "首单应异步落库");
 
         LocalinkException ex = assertThrows(LocalinkException.class, () -> voucherOrderService.seckill(voucherId));
         assertEquals(BaseCode.SECKILL_DUPLICATE_ORDER.getCode(), ex.getCode());
@@ -273,8 +276,7 @@ class SeckillOrderIntegrationTest {
             }
             assertEquals(1, success, "同一用户并发应恰好成交一单");
             assertEquals(threads - 1, duplicateRejected);
-            assertEquals(1L, voucherOrderMapper.selectCount(new LambdaQueryWrapper<VoucherOrder>()
-                    .eq(VoucherOrder::getVoucherId, voucherId)));
+            assertTrue(OrderAwait.awaitCountByVoucher(voucherOrderMapper, voucherId, 1), "胜者订单应异步落库");
             assertEquals(9, selectSeckill(voucherId).getStock());
         } finally {
             pool.shutdownNow();
@@ -321,9 +323,8 @@ class SeckillOrderIntegrationTest {
             }
             assertEquals(1, success);
             assertEquals(threads - 1, stockRejected);
+            assertTrue(OrderAwait.awaitCountByVoucher(voucherOrderMapper, voucherId, 1), "胜者订单应异步落库");
             assertEquals(0, selectSeckill(voucherId).getStock());
-            assertEquals(1L, voucherOrderMapper.selectCount(new LambdaQueryWrapper<VoucherOrder>()
-                    .eq(VoucherOrder::getVoucherId, voucherId)));
         } finally {
             pool.shutdownNow();
         }
