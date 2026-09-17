@@ -51,6 +51,9 @@ localink:
       seckill-order:
         partitions: 3
         replicas: 1
+      cache-invalidation:
+        partitions: 1
+        replicas: 1
   cache:
     bloom:
       filters:

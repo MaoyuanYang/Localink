@@ -14,12 +14,16 @@ import com.localink.cache.RedisCache;
 import com.localink.common.code.BaseCode;
 import com.localink.common.exception.LocalinkException;
 import com.localink.constant.BloomFilterAlias;
+import com.localink.constant.LocalCacheAlias;
 import com.localink.constant.KeyManage;
 import com.localink.entity.Shop;
 import com.localink.framework.cache.LogicalExpiryEntry;
 import com.localink.cache.LocalCache;
 import com.localink.lock.DistributedLock;
 import com.localink.lock.LockType;
+import com.localink.mq.CacheInvalidationMessage;
+import com.localink.mq.MessageProducer;
+import com.localink.mq.MqTopics;
 import com.localink.mapper.ShopMapper;
 import com.localink.service.ShopService;
 import lombok.RequiredArgsConstructor;
@@ -52,6 +56,7 @@ public class ShopServiceImpl implements ShopService {
     private final BloomFilterRegistry bloomFilterRegistry;
     private final LocalCache<String, ShopVO> shopLocalCache;
     private final DistributedLock distributedLock;
+    private final MessageProducer messageProducer;
 
     @Override
     public ShopVO detail(Long id) {
@@ -194,6 +199,7 @@ public class ShopServiceImpl implements ShopService {
         shopMapper.updateById(shop);
         redisCache.delete(shopKey(dto.getId()));
         shopLocalCache.invalidate(localKey(dto.getId()));
+        broadcastInvalidate(dto.getId());
     }
 
     @Override
@@ -202,10 +208,20 @@ public class ShopServiceImpl implements ShopService {
         shopMapper.deleteById(id);
         redisCache.delete(shopKey(id));
         shopLocalCache.invalidate(localKey(id));
+        broadcastInvalidate(id);
     }
 
     private KeyBuild shopKey(Long id) {
         return keyBuilder.build(KeyManage.SHOP_INFO, id);
+    }
+
+    /**
+     * 广播失效其他实例的本地缓存副本（本实例已同步失效，广播回来幂等无害）；
+     * fire-and-forget——丢失由 L1 的 10s TTL 兜底（M2.10 设计）。
+     */
+    private void broadcastInvalidate(Long id) {
+        messageProducer.sendAsync(MqTopics.CACHE_INVALIDATION, String.valueOf(id),
+                new CacheInvalidationMessage(LocalCacheAlias.SHOP, localKey(id)));
     }
 
     private String localKey(Long id) {
