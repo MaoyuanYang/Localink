@@ -64,7 +64,19 @@ public enum KeyManage implements KeyTemplate {
      * 券 ID → 已购用户集合（Set）。与 SECKILL_STOCK 同槽；Lua 内 SISMEMBER 判重 + SADD 登记，
      * 判重与扣减同脚本原子完成——M3.5 用户维度锁的替代者。
      */
-    SECKILL_ORDER_USERS("seckill:order:{%s}", null, "秒杀已购用户集合（Set，hash tag 同槽，一人一单 Lua 原子判重）");
+    SECKILL_ORDER_USERS("seckill:order:{%s}", null, "秒杀已购用户集合（Set，hash tag 同槽，一人一单 Lua 原子判重）"),
+
+    /**
+     * 幂等结果标记（String，JSON 结果，TTL 由注解 markerTtl 决定）。
+     * 实际 key 由 idempotent-starter 前缀生成：lk:idem:marker:{name}:{key}——注解常量无法引用枚举，
+     * 此登记为文档对齐与 redis-cli 观测入口（同 SECKILL_ORDER_LOCK 先例）。
+     */
+    IDEMPOTENT_MARKER("idem:marker:%s:%s", null, "幂等结果标记（@RepeatExecuteLimit 生成 lk:idem:marker:{name}:{key}，此处为文档对齐）"),
+
+    /**
+     * 幂等分布式公平锁（与 marker 同名空间）。实际 key：lk:idem:lock:{name}:{key}。
+     */
+    IDEMPOTENT_LOCK("idem:lock:%s:%s", null, "幂等分布式公平锁（@RepeatExecuteLimit 生成 lk:idem:lock:{name}:{key}，此处为文档对齐）");
 
     private final String template;
     private final Duration ttl;
