@@ -86,6 +86,13 @@ public enum KeyManage implements KeyTemplate {
     IDEMPOTENT_LOCK("idem:lock:%s:%s", null, "幂等分布式公平锁（@RepeatExecuteLimit 生成 lk:idem:lock:{name}:{key}，此处为文档对齐）"),
 
     /**
+     * 券 ID + 用户 ID → 秒杀前置令牌（String，值=随机令牌，TTL 30s）。M3.15：
+     * 申请接口经 @RateLimit 双维度闸门后发放（覆盖式，重申刷新旧令牌作废）；
+     * 下单链路 Lua 原子 GET+DEL 一次性消费——库存不认识没令牌的人。
+     */
+    SECKILL_TOKEN("seckill:token:%s:%s", Duration.ofSeconds(30), "秒杀前置令牌（String 随机值，TTL 30s，Lua 原子一次性消费）"),
+
+    /**
      * 限流状态 key（M3.13 ratelimit-starter 生成，前缀独立不经 KeyBuilder）：
      * 令牌桶 lk:rl:tb:{scene}:{dimension}（Hash：tokens/last）、滑动窗口 lk:rl:sw:{scene}:{dimension}
      * （ZSet：member=请求标识，score=毫秒）。空闲 TTL 自动清理（桶=补满耗时×2 下限 60s；窗=窗口长+60s）。

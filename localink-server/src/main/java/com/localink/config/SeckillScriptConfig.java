@@ -31,4 +31,15 @@ public class SeckillScriptConfig {
         script.setResultType(String.class);
         return script;
     }
+
+    /**
+     * M3.15 前置令牌一次性消费：0 通过 / 1 不存在（未申请、过期、已消费）/ 2 不匹配。
+     */
+    @Bean
+    public RedisScript<Long> consumeSeckillTokenScript() {
+        DefaultRedisScript<Long> script = new DefaultRedisScript<>();
+        script.setScriptSource(new ResourceScriptSource(new ClassPathResource("lua/consume_seckill_token.lua")));
+        script.setResultType(Long.class);
+        return script;
+    }
 }

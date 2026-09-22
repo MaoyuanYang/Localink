@@ -92,10 +92,26 @@ class SeckillOrderHttpIntegrationTest {
     }
 
     @Test
-    void seckillWithoutTokenRejected() throws Exception {
-        mockMvc.perform(post("/api/seckill-voucher/1/seckill"))
+    void seckillWithoutAuthTokenRejected() throws Exception {
+        Long voucherId = createOpenSeckillVoucher(5);
+
+        mockMvc.perform(post("/api/seckill-voucher/{voucherId}/seckill", voucherId)
+                        .queryParam("token", "any-token"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(BaseCode.UNAUTHORIZED.getCode()));
+    }
+
+    @Test
+    void seckillWithoutGrabTokenRejectedAsParamError() throws Exception {
+        Long voucherId = createOpenSeckillVoucher(5);
+        String token = loginAndGetToken();
+
+        mockMvc.perform(post("/api/seckill-voucher/{voucherId}/seckill", voucherId)
+                        .header(TokenRefreshInterceptor.AUTH_HEADER, token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(BaseCode.PARAM_ERROR.getCode()));
+
+        cleanupVoucher(voucherId);
     }
 
     @Test
@@ -104,8 +120,10 @@ class SeckillOrderHttpIntegrationTest {
         String token = loginAndGetToken();
         User user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getPhone, PHONE));
 
+        String grabToken = fetchGrabToken(voucherId, token);
         mockMvc.perform(post("/api/seckill-voucher/{voucherId}/seckill", voucherId)
-                        .header(TokenRefreshInterceptor.AUTH_HEADER, token))
+                        .header(TokenRefreshInterceptor.AUTH_HEADER, token)
+                        .queryParam("token", grabToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(BaseCode.SUCCESS.getCode()))
                 .andExpect(jsonPath("$.data").isNotEmpty());
@@ -142,5 +160,21 @@ class SeckillOrderHttpIntegrationTest {
         String token = userService.login(PHONE, code);
         issuedTokens.add(token);
         return token;
+    }
+
+    private String fetchGrabToken(Long voucherId, String authToken) throws Exception {
+        String body = mockMvc.perform(post("/api/seckill-voucher/{voucherId}/token", voucherId)
+                        .header(TokenRefreshInterceptor.AUTH_HEADER, authToken))
+                .andExpect(jsonPath("$.code").value(BaseCode.SUCCESS.getCode()))
+                .andReturn().getResponse().getContentAsString();
+        return com.alibaba.fastjson2.JSON.parseObject(body).getString("data");
+    }
+
+    private void cleanupVoucher(Long voucherId) {
+        voucherOrderMapper.delete(new LambdaQueryWrapper<VoucherOrder>().eq(VoucherOrder::getVoucherId, voucherId));
+        seckillStockCache.evict(voucherId);
+        seckillVoucherMapper.delete(new LambdaQueryWrapper<SeckillVoucher>().eq(SeckillVoucher::getVoucherId, voucherId));
+        voucherMapper.deleteById(voucherId);
+        createdVoucherIds.remove(voucherId);
     }
 }

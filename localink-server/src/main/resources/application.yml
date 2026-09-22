@@ -79,3 +79,10 @@ localink:
         algorithm: SLIDING_WINDOW
         threshold: 1
         window: 60s
+      seckill-token:
+        algorithm: SLIDING_WINDOW
+        threshold: 10
+        window: 60s
+        overrides:
+          USER:
+            threshold: 3

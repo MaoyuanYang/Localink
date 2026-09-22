@@ -18,6 +18,7 @@ public enum BaseCode {
     SECKILL_STOCK_NOT_ENOUGH(10004, "库存不足"),
     SECKILL_DUPLICATE_ORDER(10005, "每人限购一单"),
     SECKILL_LEVEL_NOT_ENOUGH(10006, "会员等级不满足抢购条件"),
+    SECKILL_TOKEN_INVALID(10007, "抢购令牌无效或已过期，请重新获取"),
 
     SMS_SEND_TOO_FREQUENT(20001, "请勿频繁获取验证码"),
     SMS_CODE_INVALID(20002, "验证码错误"),
