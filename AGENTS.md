@@ -1,6 +1,6 @@
 # AGENTS.md — Localink 项目开发与协作规范
 
-本文件是 Localink 项目的**最高执行规范**，所有开发参与者（包括 AI 协作者）必须严格遵守。任何迭代开始前先阅读本文件。
+本文件是 Localink 项目的**最高执行规范**，所有开发参与者（包括 AI 协作者）必须严格遵守。任何主题开发开始前先阅读本文件。
 
 ---
 
@@ -16,7 +16,7 @@
 
 1. **参考设计、重写实现**：禁止从 hmdp-plus 复制粘贴源码。包结构、命名、实现细节均为 Localink 自有风格；参考仅限于架构思路与方案选型
 2. **演进式开发**：每个技术点按"先暴露问题 → 再解决问题"的顺序迭代（例：秒杀先做纯 DB 版压测暴露超卖，再逐代加乐观锁/Redis/Lua/Kafka），保证每个组件的"为什么存在"可解释
-3. **最小迭代**：每次只完成一个迭代点，做到可运行、可验证，经用户确认后才进入下一个
+3. **主题单元推进**：每次完成 roadmap 中一个技术主题（一组 2~5 个关联能力），做到可运行、可验证，经用户确认后进入下一个主题。一个主题一张任务卡、一个 feature 分支、一个 PR——不拆批交付、不跨主题混提交
 4. **不直接提交 main**：一切改动走 feature 分支 + PR
 
 ## 3. 技术栈
@@ -35,18 +35,18 @@
 | 根包名 | `com.localink` | — |
 | 前端（localink-web/） | React + TypeScript + Vite + Ant Design + Zustand + Axios | 18 / 6 / 5.x |
 
-## 4. 迭代流程（六步闭环，每个迭代必须走完）
+## 4. 主题交付流程（六步闭环，每个主题必须走完）
 
-1. **任务卡**：在 `docs/iterations/mX-Y-名称.md` 写明：目标、设计取舍（为什么这么做、备选方案是什么）、涉及的表/接口/Redis Key
-2. **实现**：最小可运行代码
-3. **验证**：接口自测或单测，验证过程与结果记录到任务卡"验证记录"一节
-4. **提交**：feature 分支提交 → 推送 → 用户 PR 自审合入 main
+1. **任务卡**：在 `docs/iterations/mX-主题名.md` 写明：目标、主题内子任务清单、设计取舍（为什么这么做、备选方案是什么）、涉及的表/接口/Redis Key。演进式开发原则在主题内同样适用：先暴露问题 → 再解决问题
+2. **实现**：主题内全部子能力一次做完，最小可运行
+3. **验证**：主题内每个能力点有测试覆盖 + 全量回归绿，验证过程与结果记录到任务卡"验证记录"一节
+4. **提交**：一个主题一个 feature 分支 → 推送 → PR 合入 main
 5. **学习清单**：任务卡末尾给出"核心知识点 + 面试必问题"
-6. **用户确认**：用户学习并确认后，勾选 `docs/roadmap.md` 对应项，开始下一迭代
+6. **用户确认**：用户学习并确认后，勾选 `docs/roadmap.md` 对应主题行，开始下一主题
 
 ## 5. Git 规范
 
-- **分支**：`main`（主干，受保护）/ `feature/mX-Y-描述`（迭代分支，如 `feature/m3-6-seckill-lua`）
+- **分支**：`main`（主干，受保护）/ `feature/mX-主题名`（主题分支，如 `feature/m5-reconcile`；历史细粒度分支保留原名）
 - **提交信息**：Conventional Commits 格式 `type(scope): subject`
   - type：`feat` 新功能 / `fix` 修复 / `docs` 文档 / `refactor` 重构 / `test` 测试 / `chore` 构建杂项 / `perf` 性能
   - 示例：`feat(seckill): 秒杀下单V1-纯DB实现`
@@ -56,7 +56,7 @@
 ## 6. 代码规范
 
 - 根包 `com.localink`，按模块分包：`controller / service / mapper / entity / dto / config / framework.*`
-- **解释性内容写入迭代任务卡，不写进代码注释**；仅公共 API 保留必要 Javadoc
+- **解释性内容写入主题任务卡，不写进代码注释**；仅公共 API 保留必要 Javadoc
 - 统一返回体 `Result`，错误码统一走枚举 `BaseCode`，业务异常统一抛 `LocalinkException`，全局异常处理器兜底
 - Redis Key 一律通过 Key 治理组件生成（统一环境前缀），禁止散落硬编码
 - 配置外置 `application.yml`，环境差异走 `application-{profile}.yml`
@@ -75,17 +75,17 @@ docs/
 ├── prd.md              # 需求文档（M0.1）
 ├── architecture.md     # 架构设计（M0.2）
 ├── database.md         # 数据库设计（M1.1）
-├── roadmap.md          # 迭代路线图（勾选跟踪）
+├── roadmap.md          # 主题路线图（勾选跟踪）
 ├── middleware-setup.md # 中间件安装指引（M0.3）
 ├── web-frontend.md     # Web 前端设计（M0.7）
-└── iterations/         # 每迭代一张任务卡
-    └── mX-Y-名称.md
+└── iterations/         # 每主题一张任务卡
+    └── mX-主题名.md    # M5 起按主题命名；历史细粒度卡（mX-Y-名称.md）保留原名不重命名
 ```
 
 ## 8. 进度跟踪
 
-- `docs/roadmap.md` 是唯一进度源：`- [ ]` 待办 / `- [x]` 已完成（附完成日期）
-- 每个迭代 PR 中必须包含 roadmap.md 的勾选更新
+- `docs/roadmap.md` 是唯一进度源：`- [ ]` 待办 / `- [x]` 已完成（附完成日期），粒度=技术主题
+- 每个主题 PR 中必须包含 roadmap.md 的勾选更新
 
 ## 9. 决策分歧处理
 
