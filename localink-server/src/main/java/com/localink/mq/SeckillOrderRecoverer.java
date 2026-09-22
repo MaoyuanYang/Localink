@@ -40,6 +40,7 @@ public class SeckillOrderRecoverer implements ConsumerRecordRecoverer {
         log.error("重试耗尽，回滚秒杀资格, orderId={}, voucherId={}, userId={}, reason={}",
                 payload.orderId(), payload.voucherId(), payload.userId(), exception.getMessage(), exception);
         voucherOrderService.rollbackSeckillQualification(payload.voucherId(), payload.userId(),
+                payload.orderId(), payload.traceId(),
                 "CONSUME_EXHAUSTED", "retries exhausted: " + exception.getMessage());
     }
 

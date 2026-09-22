@@ -8,12 +8,14 @@ import com.localink.common.exception.LocalinkException;
 import com.localink.entity.SeckillVoucher;
 import com.localink.entity.Voucher;
 import com.localink.entity.VoucherOrder;
+import com.localink.entity.VoucherReconcileLog;
 import com.localink.framework.holder.UserHolder;
 import com.localink.framework.seckill.SeckillStockCache;
 import com.localink.idempotent.RepeatExecuteLimit;
 import com.localink.mapper.SeckillVoucherMapper;
 import com.localink.mapper.VoucherMapper;
 import com.localink.mapper.VoucherOrderMapper;
+import com.localink.mapper.VoucherReconcileLogMapper;
 import com.localink.mapper.RollbackFailureLogMapper;
 import com.localink.entity.RollbackFailureLog;
 import com.localink.mq.MessageProducer;
@@ -30,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 
 @Slf4j
 @Service
@@ -41,19 +44,27 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
     private static final int ORDER_STATUS_CREATED = 1;
     private static final int RECONCILIATION_PENDING = 1;
 
-    private static final long DEDUCT_SUCCESS = 0;
-    private static final long DEDUCT_NOT_WARMED = 1;
-    private static final long DEDUCT_STOCK_EMPTY = 2;
-    private static final long DEDUCT_DUPLICATE = 3;
+    private static final String DEDUCT_SUCCESS = "0";
+    private static final String DEDUCT_NOT_WARMED = "1";
+    private static final String DEDUCT_STOCK_EMPTY = "2";
+    private static final String DEDUCT_DUPLICATE = "3";
+    private static final String ROLLBACK_DONE_PREFIX = "0";
+
+    private static final int LOG_TYPE_DEDUCT = 1;
+    private static final int LOG_TYPE_RESTORE = 2;
+    private static final int BUSINESS_ORDER_OK = 1;
+    private static final int BUSINESS_ORDER_TIMEOUT = 2;
+    private static final int BUSINESS_ORDER_FAIL = 3;
 
     private final VoucherMapper voucherMapper;
     private final SeckillVoucherMapper seckillVoucherMapper;
     private final VoucherOrderMapper voucherOrderMapper;
+    private final VoucherReconcileLogMapper voucherReconcileLogMapper;
     private final RollbackFailureLogMapper rollbackFailureLogMapper;
     private final RedisCache redisCache;
     private final SeckillStockCache seckillStockCache;
-    private final RedisScript<Long> seckillDeductScript;
-    private final RedisScript<Long> seckillRollbackScript;
+    private final RedisScript<String> seckillDeductScript;
+    private final RedisScript<String> seckillRollbackScript;
     private final MessageProducer messageProducer;
 
     @Override
@@ -63,15 +74,16 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
         requireUserLevel(seckill.getMinLevel());
         Long userId = UserHolder.get().getId();
 
-        deductInRedis(voucherId, userId, seckill.getEndTime());
-
         long orderId = IdWorker.getId();
-        SeckillOrderMessage message =
-                new SeckillOrderMessage(orderId, voucherId, voucher.getType(), userId);
+        long traceId = IdWorker.getId();
+        DeductAccount account = deductInRedis(voucherId, userId, traceId, seckill.getEndTime());
+
+        SeckillOrderMessage message = new SeckillOrderMessage(orderId, voucherId, voucher.getType(),
+                userId, traceId, account.before(), account.after());
         try {
             messageProducer.sendSync(MqTopics.SECKILL_ORDER, String.valueOf(voucherId), message);
         } catch (RuntimeException e) {
-            rollbackSeckillQualification(voucherId, userId, "REQUEST_SEND",
+            rollbackSeckillQualification(voucherId, userId, orderId, traceId, "REQUEST_SEND",
                     "seckill send failed: " + e.getMessage());
             throw e;
         }
@@ -81,11 +93,12 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
     /**
      * 消费端建单：@RepeatExecuteLimit 以 orderId 为幂等键挡重复投递（标记快路径 → 唯一索引终审；
      * 标记写在事务提交后，回滚的执行不落标记、重投会重试）。CAS 与唯一索引保留为标记丢失时的兜底。
+     * 订单与扣减流水行同事务写入——DB 流水与订单同生共死，对账永无"有流水无订单"的中间态噪声。
      */
     @Override
     @RepeatExecuteLimit(name = "seckill-order", key = "#message.orderId()")
     @Transactional
-    public void createSeckillOrder(SeckillOrderMessage message) {
+    public void createSeckillOrder(SeckillOrderMessage message, String messageId) {
         int deducted = seckillVoucherMapper.deductStock(message.voucherId());
         if (deducted == 0) {
             throw new LocalinkException(BaseCode.SECKILL_STOCK_NOT_ENOUGH,
@@ -100,52 +113,76 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
         order.setReconciliationStatus(RECONCILIATION_PENDING);
         try {
             voucherOrderMapper.insert(order);
+            voucherReconcileLogMapper.insert(buildDeductLog(message, messageId));
         } catch (DuplicateKeyException e) {
             log.info("唯一索引拦截重复建单（守卫与插入间隙的竞态）, orderId={}", message.orderId());
         }
     }
 
     /**
-     * Lua 原子完成"库存判定 + 一人一单判重 + 扣减"——单线程执行无并发缝隙。
+     * Lua 原子完成"库存判定 + 一人一单判重 + 扣减 + 流水落账"——单线程执行无并发缝隙。
+     * 成功返回携账目（traceId/前后库存）供建消息携带；失败仍为单数字码。
      */
-    private void deductInRedis(Long voucherId, Long userId, LocalDateTime endTime) {
+    private DeductAccount deductInRedis(Long voucherId, Long userId, long traceId, LocalDateTime endTime) {
         String ttlSeconds = String.valueOf(Math.max(1,
                 Duration.between(LocalDateTime.now(),
                         endTime == null ? LocalDateTime.now().plusHours(24) : endTime).toSeconds()));
-        Long result = redisCache.scripts().execute(seckillDeductScript,
-                List.of(seckillStockCache.stockKey(voucherId), seckillStockCache.orderUsersKey(voucherId)),
-                String.valueOf(userId), ttlSeconds);
+        String result = redisCache.scripts().execute(seckillDeductScript,
+                List.of(seckillStockCache.stockKey(voucherId), seckillStockCache.orderUsersKey(voucherId),
+                        seckillStockCache.flowKey(voucherId)),
+                String.valueOf(userId), ttlSeconds, String.valueOf(traceId),
+                String.valueOf(System.currentTimeMillis()));
         if (result == null) {
             throw new LocalinkException(BaseCode.SYSTEM_ERROR, "秒杀脚本无返回值");
         }
-        if (result == DEDUCT_SUCCESS) {
-            return;
+        String[] parts = result.split("\\|");
+        if (DEDUCT_SUCCESS.equals(parts[0])) {
+            return new DeductAccount(Long.parseLong(parts[1]), Integer.parseInt(parts[2]),
+                    Integer.parseInt(parts[3]));
         }
-        if (result == DEDUCT_STOCK_EMPTY) {
+        if (DEDUCT_STOCK_EMPTY.equals(result)) {
             throw new LocalinkException(BaseCode.SECKILL_STOCK_NOT_ENOUGH);
         }
-        if (result == DEDUCT_DUPLICATE) {
+        if (DEDUCT_DUPLICATE.equals(result)) {
             throw new LocalinkException(BaseCode.SECKILL_DUPLICATE_ORDER);
         }
         throw new LocalinkException(BaseCode.SYSTEM_ERROR, "库存未预热，等待回灌后重试");
     }
 
     /**
-     * 统一回滚入口（M3.11）：请求发送失败（立即）/ 消费重试耗尽（recoverer）/ 超龄丢弃（beforeConsume）
-     * 三处共用。逆增量 Lua 幂等可重试；执行失败落 lk_rollback_failure_log 供 M5.2 补偿告警。
+     * 统一回滚入口（M3.11 建立，M3.12 增流水账）：请求发送失败（立即）/ 消费重试耗尽（recoverer）/
+     * 超龄丢弃（beforeConsume）三处共用。逆增量 Lua 幂等可重试并翻 Redis 流水为恢复态；
+     * 成功后落 DB 恢复流水行（business_type 按 source 归类）。Lua 或落行失败落 lk_rollback_failure_log
+     * 供 M5.2 补偿告警——重试触发时 Lua 返回"无需补偿"即安全收敛。
      */
     @Override
-    public void rollbackSeckillQualification(Long voucherId, Long userId, String source, String detail) {
+    public void rollbackSeckillQualification(Long voucherId, Long userId, Long orderId, Long traceId,
+                                              String source, String detail) {
         try {
-            redisCache.scripts().execute(seckillRollbackScript,
-                    List.of(seckillStockCache.stockKey(voucherId), seckillStockCache.orderUsersKey(voucherId)),
-                    String.valueOf(userId));
+            String result = redisCache.scripts().execute(seckillRollbackScript,
+                    List.of(seckillStockCache.stockKey(voucherId), seckillStockCache.orderUsersKey(voucherId),
+                            seckillStockCache.flowKey(voucherId)),
+                    String.valueOf(userId), traceId == null ? "" : String.valueOf(traceId),
+                    String.valueOf(System.currentTimeMillis()));
+            if (result == null) {
+                throw new IllegalStateException("回滚脚本无返回值");
+            }
+            if (!result.startsWith(ROLLBACK_DONE_PREFIX)) {
+                log.info("回滚无需补偿（用户不在已购集合）, voucherId={}, userId={}, source={}",
+                        voucherId, userId, source);
+                return;
+            }
+            String[] parts = result.split("\\|");
+            voucherReconcileLogMapper.insert(buildRestoreLog(voucherId, userId, orderId, traceId,
+                    source, detail, Integer.parseInt(parts[1]), Integer.parseInt(parts[2])));
         } catch (Exception e) {
             log.error("秒杀 Redis 回滚失败, 已落失败表待补偿, voucherId={}, userId={}, source={}",
                     voucherId, userId, source, e);
             RollbackFailureLog failureLog = new RollbackFailureLog();
             failureLog.setVoucherId(voucherId);
             failureLog.setUserId(userId);
+            failureLog.setOrderId(orderId);
+            failureLog.setTraceId(traceId);
             failureLog.setRetryAttempts(0);
             failureLog.setSource(source);
             failureLog.setDetail(detail + " | rollback error: " + e.getMessage());
@@ -156,6 +193,47 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
     @Override
     public boolean seckillOrderExists(Long orderId) {
         return voucherOrderMapper.selectById(orderId) != null;
+    }
+
+    /**
+     * 扣减流水行（logType=1）：账目数字来自消息携带的 Lua 返回；旧消息缺 traceId 时以 orderId 顶替
+     * （同一资格生命周期，语义不变）。行随建单事务写入，uk_order_log(order_id, log_type) 拦重投双写。
+     */
+    private VoucherReconcileLog buildDeductLog(SeckillOrderMessage message, String messageId) {
+        VoucherReconcileLog logRow = new VoucherReconcileLog();
+        logRow.setOrderId(message.orderId());
+        logRow.setUserId(message.userId());
+        logRow.setVoucherId(message.voucherId());
+        logRow.setTraceId(Objects.requireNonNullElse(message.traceId(), message.orderId()));
+        logRow.setMessageId(messageId);
+        logRow.setLogType(LOG_TYPE_DEDUCT);
+        logRow.setBusinessType(BUSINESS_ORDER_OK);
+        logRow.setBeforeQty(message.stockBefore());
+        logRow.setChangeQty(-1);
+        logRow.setAfterQty(message.stockAfter());
+        logRow.setReconciliationStatus(RECONCILIATION_PENDING);
+        return logRow;
+    }
+
+    /**
+     * 恢复流水行（logType=2）：回滚成功后落；STALE_DROP 归"下单超时"，其余归"下单失败"。
+     * traceId 缺失（旧消息/手工消息）时以 orderId 顶替（同扣减行先例）。
+     */
+    private VoucherReconcileLog buildRestoreLog(Long voucherId, Long userId, Long orderId, Long traceId,
+                                                String source, String detail, int before, int after) {
+        VoucherReconcileLog logRow = new VoucherReconcileLog();
+        logRow.setOrderId(orderId);
+        logRow.setUserId(userId);
+        logRow.setVoucherId(voucherId);
+        logRow.setTraceId(Objects.requireNonNullElse(traceId, orderId));
+        logRow.setLogType(LOG_TYPE_RESTORE);
+        logRow.setBusinessType("STALE_DROP".equals(source) ? BUSINESS_ORDER_TIMEOUT : BUSINESS_ORDER_FAIL);
+        logRow.setBeforeQty(before);
+        logRow.setChangeQty(1);
+        logRow.setAfterQty(after);
+        logRow.setReconciliationStatus(RECONCILIATION_PENDING);
+        logRow.setDetail("source=" + source + " | " + detail);
+        return logRow;
     }
 
     private Voucher requireSeckillVoucher(Long voucherId) {
@@ -196,5 +274,11 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
         if (level == null || level < minLevel) {
             throw new LocalinkException(BaseCode.SECKILL_LEVEL_NOT_ENOUGH);
         }
+    }
+
+    /**
+     * 扣减成功账目：traceId + 扣减前后库存（Lua 返回值解析产物，随消息流转到消费端落 DB 流水）。
+     */
+    private record DeductAccount(long traceId, int before, int after) {
     }
 }

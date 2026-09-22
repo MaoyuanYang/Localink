@@ -29,6 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * M3.6 秒杀 Lua 语义验证：扣减/不足/重复/未预热四返回码、回滚补偿幂等、预热以 DB 为准。
+ * M3.12 起 deduct/rollback 返回字符串携账目（'0|traceId|before|after' / '0|before|after'），并同原子落流水。
  */
 @SpringBootTest
 class SeckillLuaIntegrationTest {
@@ -36,6 +37,8 @@ class SeckillLuaIntegrationTest {
     private static final String USER_A = "90001";
     private static final String USER_B = "90002";
     private static final String TTL = "3600";
+    private static final String TRACE_A = "777001";
+    private static final String TS = "1760000000000";
 
     @Autowired
     private SeckillVoucherService seckillVoucherService;
@@ -50,10 +53,10 @@ class SeckillLuaIntegrationTest {
     private RedisCache redisCache;
 
     @Autowired
-    private RedisScript<Long> seckillDeductScript;
+    private RedisScript<String> seckillDeductScript;
 
     @Autowired
-    private RedisScript<Long> seckillRollbackScript;
+    private RedisScript<String> seckillRollbackScript;
 
     @Autowired
     private VoucherMapper voucherMapper;
@@ -80,27 +83,30 @@ class SeckillLuaIntegrationTest {
     void deductLuaDecrementsStockAndRegistersUser() {
         Long voucherId = createVoucher(10);
 
-        Long result = deduct(voucherId, USER_A);
+        String result = deduct(voucherId, USER_A, TRACE_A);
 
-        assertEquals(0L, result);
+        assertEquals("0|" + TRACE_A + "|10|9", result);
         assertEquals("9", redisCache.strings().getString(seckillStockCache.stockKey(voucherId)));
         assertTrue(redisCache.sets().isMember(seckillStockCache.orderUsersKey(voucherId), USER_A));
+        String flow = redisCache.hashes().entries(seckillStockCache.flowKey(voucherId)).get(TRACE_A);
+        assertTrue(flow.contains("\"logType\":1") && flow.contains("\"beforeQty\":10")
+                && flow.contains("\"afterQty\":9"), "扣减应同原子落流水: " + flow);
     }
 
     @Test
     void deductLuaRejectsWhenStockExhausted() {
         Long voucherId = createVoucher(1);
-        deduct(voucherId, USER_A);
+        deduct(voucherId, USER_A, TRACE_A);
 
-        assertEquals(2L, deduct(voucherId, USER_B));
+        assertEquals("2", deduct(voucherId, USER_B, "777002"));
     }
 
     @Test
     void deductLuaRejectsDuplicateUserWithoutTouchingStock() {
         Long voucherId = createVoucher(10);
-        deduct(voucherId, USER_A);
+        deduct(voucherId, USER_A, TRACE_A);
 
-        assertEquals(3L, deduct(voucherId, USER_A));
+        assertEquals("3", deduct(voucherId, USER_A, "777003"));
         assertEquals("9", redisCache.strings().getString(seckillStockCache.stockKey(voucherId)));
     }
 
@@ -109,30 +115,31 @@ class SeckillLuaIntegrationTest {
         Long voucherId = createVoucher(10);
         seckillStockCache.evict(voucherId);
 
-        assertEquals(1L, deduct(voucherId, USER_A));
+        assertEquals("1", deduct(voucherId, USER_A, TRACE_A));
     }
 
     @Test
     void rollbackLuaRestoresStockAndMembership() {
         Long voucherId = createVoucher(10);
-        deduct(voucherId, USER_A);
+        deduct(voucherId, USER_A, TRACE_A);
 
-        Long rollback = redisCache.scripts().execute(seckillRollbackScript,
-                List.of(seckillStockCache.stockKey(voucherId), seckillStockCache.orderUsersKey(voucherId)), USER_A);
+        String rollback = rollback(voucherId, USER_A, TRACE_A);
 
-        assertEquals(0L, rollback);
+        assertEquals("0|9|10", rollback);
         assertEquals("10", redisCache.strings().getString(seckillStockCache.stockKey(voucherId)));
         assertFalse(redisCache.sets().isMember(seckillStockCache.orderUsersKey(voucherId), USER_A));
+        String flow = redisCache.hashes().entries(seckillStockCache.flowKey(voucherId)).get(TRACE_A);
+        assertTrue(flow.contains("\"logType\":2") && flow.contains("\"afterQty\":10"),
+                "回滚应把流水翻为恢复态: " + flow);
     }
 
     @Test
     void rollbackLuaIsNoopWhenUserNotInSet() {
         Long voucherId = createVoucher(10);
 
-        Long rollback = redisCache.scripts().execute(seckillRollbackScript,
-                List.of(seckillStockCache.stockKey(voucherId), seckillStockCache.orderUsersKey(voucherId)), USER_A);
+        String rollback = rollback(voucherId, USER_A, TRACE_A);
 
-        assertEquals(1L, rollback);
+        assertEquals("1", rollback);
         assertEquals("10", redisCache.strings().getString(seckillStockCache.stockKey(voucherId)));
     }
 
@@ -157,10 +164,18 @@ class SeckillLuaIntegrationTest {
         assertNull(redisCache.strings().getString(seckillStockCache.stockKey(voucherId)));
     }
 
-    private Long deduct(Long voucherId, String userId) {
+    private String deduct(Long voucherId, String userId, String traceId) {
         return redisCache.scripts().execute(seckillDeductScript,
-                List.of(seckillStockCache.stockKey(voucherId), seckillStockCache.orderUsersKey(voucherId)),
-                userId, TTL);
+                List.of(seckillStockCache.stockKey(voucherId), seckillStockCache.orderUsersKey(voucherId),
+                        seckillStockCache.flowKey(voucherId)),
+                userId, TTL, traceId, TS);
+    }
+
+    private String rollback(Long voucherId, String userId, String traceId) {
+        return redisCache.scripts().execute(seckillRollbackScript,
+                List.of(seckillStockCache.stockKey(voucherId), seckillStockCache.orderUsersKey(voucherId),
+                        seckillStockCache.flowKey(voucherId)),
+                userId, traceId, TS);
     }
 
     private Long createVoucher(int stock) {

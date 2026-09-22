@@ -257,7 +257,7 @@ erDiagram
 
 ### 4.11 lk_voucher_reconcile_log（对账流水表）
 
-对应需求：F-TRD-06。三层对账（Redis 流水 ↔ 本表 ↔ 订单）的中间层，M3.12 启用。trace_id 由 Lua 扣减时生成，串联流水、订单与回滚记录。
+对应需求：F-TRD-06。三层对账（Redis 流水 ↔ 本表 ↔ 订单）的中间层，M3.12 启用。trace_id 标识一笔资格的生命周期（Java 扣减前预生成雪花，随 Lua 原子落 Redis 流水、随消息流转），串联流水、订单与回滚记录；扣减行随建单事务同写、恢复行随回滚成功后写，`uk_order_log(order_id, log_type)` 保证一单同一动作一行（消息重投幂等）。
 
 | 字段 | 类型 | 空 | 默认 | 说明 |
 |---|---|---|---|---|
@@ -265,7 +265,7 @@ erDiagram
 | order_id | bigint unsigned | NO | | 订单 ID |
 | user_id | bigint unsigned | NO | | 下单用户（分片冗余键） |
 | voucher_id | bigint unsigned | NO | | 券 ID |
-| trace_id | bigint unsigned | NO | | 链路追踪 ID（Lua 生成） |
+| trace_id | bigint unsigned | NO | | 链路追踪 ID（资格生命周期 ID，Java 预生成） |
 | message_id | varchar(64) | YES | NULL | Kafka 消息 UUID（消费幂等关联） |
 | log_type | tinyint | NO | 1 | 1 扣减 / 2 恢复 |
 | business_type | tinyint unsigned | NO | 1 | 1 下单成功 / 2 下单超时 / 3 下单失败 |
@@ -277,7 +277,7 @@ erDiagram
 | create_time | datetime | NO | CURRENT_TIMESTAMP | |
 | update_time | datetime | NO | CURRENT_TIMESTAMP ON UPDATE | |
 
-索引：`PRIMARY KEY(id)`、`KEY idx_order_id(order_id)`、`KEY idx_trace_id(trace_id)`、`KEY idx_message_id(message_id)`
+索引：`PRIMARY KEY(id)`、`UNIQUE uk_order_log(order_id, log_type)`（一单同一动作一行，重投幂等）、`KEY idx_order_id(order_id)`、`KEY idx_trace_id(trace_id)`、`KEY idx_message_id(message_id)`（M3.12 实装时补唯一索引，防消息重投双写流水）
 
 ### 4.12 lk_rollback_failure_log（回滚失败日志表）
 

@@ -144,7 +144,7 @@ CREATE TABLE `lk_voucher_reconcile_log` (
     `order_id`            bigint unsigned NOT NULL COMMENT '订单ID',
     `user_id`             bigint unsigned NOT NULL COMMENT '下单用户（分片冗余键）',
     `voucher_id`          bigint unsigned NOT NULL COMMENT '券ID',
-    `trace_id`            bigint unsigned NOT NULL COMMENT '链路追踪ID（Lua生成）',
+    `trace_id`            bigint unsigned NOT NULL COMMENT '链路追踪ID（资格生命周期ID，Java预生成雪花）',
     `message_id`          varchar(64)              DEFAULT NULL COMMENT 'Kafka消息UUID（消费幂等关联）',
     `log_type`            tinyint         NOT NULL DEFAULT 1 COMMENT '1扣减/2恢复',
     `business_type`       tinyint unsigned NOT NULL DEFAULT 1 COMMENT '1下单成功/2下单超时/3下单失败',
@@ -156,6 +156,7 @@ CREATE TABLE `lk_voucher_reconcile_log` (
     `create_time`         datetime        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `update_time`         datetime        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_order_log` (`order_id`, `log_type`),
     KEY `idx_order_id` (`order_id`),
     KEY `idx_trace_id` (`trace_id`),
     KEY `idx_message_id` (`message_id`)

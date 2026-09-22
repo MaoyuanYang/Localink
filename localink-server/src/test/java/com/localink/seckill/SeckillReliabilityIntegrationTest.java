@@ -6,11 +6,13 @@ import com.localink.cache.RedisCache;
 import com.localink.entity.RollbackFailureLog;
 import com.localink.entity.SeckillVoucher;
 import com.localink.entity.VoucherOrder;
+import com.localink.entity.VoucherReconcileLog;
 import com.localink.framework.seckill.SeckillStockCache;
 import com.localink.mapper.RollbackFailureLogMapper;
 import com.localink.mapper.SeckillVoucherMapper;
 import com.localink.mapper.VoucherMapper;
 import com.localink.mapper.VoucherOrderMapper;
+import com.localink.mapper.VoucherReconcileLogMapper;
 import com.localink.mq.MessageEnvelope;
 import com.localink.mq.MqTopics;
 import com.localink.mq.SeckillOrderMessage;
@@ -33,6 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * M3.11 消费可靠性：超龄丢弃（未建单回滚资格 / 已建单跳过不动账）、重试耗尽回滚、失败表映射。
  * 超龄消息用 KafkaTemplate 直发手工构造的旧时间戳信封（producer 会打新时间戳，无法注入超龄）。
+ * M3.12 起回滚联动流水：Lua 携 traceId 翻 Redis 流水 + 落 DB 恢复行（business_type 按来源归类）。
  */
 @SpringBootTest
 class SeckillReliabilityIntegrationTest {
@@ -50,6 +53,9 @@ class SeckillReliabilityIntegrationTest {
     private VoucherOrderMapper voucherOrderMapper;
 
     @Autowired
+    private VoucherReconcileLogMapper voucherReconcileLogMapper;
+
+    @Autowired
     private RollbackFailureLogMapper rollbackFailureLogMapper;
 
     @Autowired
@@ -59,7 +65,7 @@ class SeckillReliabilityIntegrationTest {
     private SeckillStockCache seckillStockCache;
 
     @Autowired
-    private RedisScript<Long> seckillDeductScript;
+    private RedisScript<String> seckillDeductScript;
 
     @Autowired
     private KafkaTemplate<String, String> kafkaTemplate;
@@ -70,6 +76,8 @@ class SeckillReliabilityIntegrationTest {
     void cleanup() {
         createdVoucherIds.forEach(id -> {
             voucherOrderMapper.delete(new LambdaQueryWrapper<VoucherOrder>().eq(VoucherOrder::getVoucherId, id));
+            voucherReconcileLogMapper.delete(new LambdaQueryWrapper<VoucherReconcileLog>()
+                    .eq(VoucherReconcileLog::getVoucherId, id));
             seckillVoucherMapper.delete(new LambdaQueryWrapper<SeckillVoucher>().eq(SeckillVoucher::getVoucherId, id));
             voucherMapper.deleteById(id);
             seckillStockCache.evict(id);
@@ -82,26 +90,29 @@ class SeckillReliabilityIntegrationTest {
     void staleMessageWithoutOrderRollsBackQualification() throws Exception {
         Long voucherId = createVoucher(5);
         Long userId = 910_001L;
-        assertEquals(0L, deductInRedis(voucherId, userId));
+        Long traceId = 888_001L;
+        assertTrue(deductInRedis(voucherId, userId, traceId).startsWith("0|"));
         assertEquals("4", redisStock(voucherId));
 
-        sendRawMessage(new SeckillOrderMessage(IdWorkerId.next(), voucherId, 2, userId),
+        sendRawMessage(new SeckillOrderMessage(IdWorkerId.next(), voucherId, 2, userId, traceId, 5, 4),
                 System.currentTimeMillis() - 60_000);
 
         assertTrue(awaitRedisState(voucherId, "5", userId, false), "超龄未建单应回滚：库存回 5、用户出集合");
         assertEquals(0L, orderCount(voucherId));
+        assertTrue(awaitRestoreLog(voucherId, traceId, 2), "超龄回滚应落恢复行（business_type=2 下单超时）");
     }
 
     @Test
     void staleMessageWithExistingOrderSkipsWithoutTouchingRedis() throws Exception {
         Long voucherId = createVoucher(5);
         Long userId = 910_002L;
-        assertEquals(0L, deductInRedis(voucherId, userId));
+        Long traceId = 888_002L;
+        assertTrue(deductInRedis(voucherId, userId, traceId).startsWith("0|"));
         Long orderId = IdWorkerId.next();
         insertOrder(orderId, voucherId, userId);
         assertEquals("4", redisStock(voucherId));
 
-        sendRawMessage(new SeckillOrderMessage(orderId, voucherId, 2, userId),
+        sendRawMessage(new SeckillOrderMessage(orderId, voucherId, 2, userId, traceId, 5, 4),
                 System.currentTimeMillis() - 60_000);
 
         Thread.sleep(3000);
@@ -109,17 +120,20 @@ class SeckillReliabilityIntegrationTest {
         assertTrue(redisCache.sets().isMember(seckillStockCache.orderUsersKey(voucherId), String.valueOf(userId)),
                 "用户不得被移出已购集合");
         assertEquals(1L, orderCount(voucherId));
+        assertEquals(0L, reconcileLogCount(voucherId), "跳过路径不得产生任何流水行");
     }
 
     @Test
     void exhaustedRetriesRollBackQualification() throws Exception {
         Long voucherId = createVoucher(1);
         Long userId = 910_003L;
+        Long traceId = 888_003L;
         setDbStock(voucherId, 0);
-        assertEquals(0L, deductInRedis(voucherId, userId), "构造分歧态：Redis 扣到 0、DB 已是 0");
+        assertTrue(deductInRedis(voucherId, userId, traceId).startsWith("0|"), "构造分歧态：Redis 扣到 0、DB 已是 0");
 
         kafkaTemplate.send(MqTopics.SECKILL_ORDER, String.valueOf(voucherId), envelopeJson(
-                new SeckillOrderMessage(IdWorkerId.next(), voucherId, 2, userId), System.currentTimeMillis()));
+                new SeckillOrderMessage(IdWorkerId.next(), voucherId, 2, userId, traceId, 1, 0),
+                System.currentTimeMillis()));
 
         assertTrue(awaitRedisState(voucherId, "1", userId, false),
                 "重试耗尽（4 次尝试+退避约 1.4s）后应回滚：库存回 1、用户出集合");
@@ -127,6 +141,7 @@ class SeckillReliabilityIntegrationTest {
         assertEquals(0L, rollbackFailureLogMapper.selectCount(new LambdaQueryWrapper<RollbackFailureLog>()
                         .eq(RollbackFailureLog::getVoucherId, voucherId)),
                 "回滚成功不应落失败表");
+        assertTrue(awaitRestoreLog(voucherId, traceId, 3), "耗尽回滚应落恢复行（business_type=3 下单失败）");
     }
 
     @Test
@@ -164,14 +179,41 @@ class SeckillReliabilityIntegrationTest {
         return voucherId;
     }
 
-    private Long deductInRedis(Long voucherId, Long userId) {
+    private String deductInRedis(Long voucherId, Long userId, Long traceId) {
         return redisCache.scripts().execute(seckillDeductScript,
-                List.of(seckillStockCache.stockKey(voucherId), seckillStockCache.orderUsersKey(voucherId)),
-                String.valueOf(userId), "3600");
+                List.of(seckillStockCache.stockKey(voucherId), seckillStockCache.orderUsersKey(voucherId),
+                        seckillStockCache.flowKey(voucherId)),
+                String.valueOf(userId), "3600", String.valueOf(traceId),
+                String.valueOf(System.currentTimeMillis()));
     }
 
     private String redisStock(Long voucherId) {
         return redisCache.strings().getString(seckillStockCache.stockKey(voucherId));
+    }
+
+    private boolean awaitRestoreLog(Long voucherId, Long traceId, int expectedBusinessType)
+            throws InterruptedException {
+        long deadline = System.currentTimeMillis() + 10_000;
+        while (System.currentTimeMillis() < deadline) {
+            VoucherReconcileLog restore = voucherReconcileLogMapper.selectOne(
+                    new LambdaQueryWrapper<VoucherReconcileLog>()
+                            .eq(VoucherReconcileLog::getVoucherId, voucherId)
+                            .eq(VoucherReconcileLog::getLogType, 2)
+                            .eq(VoucherReconcileLog::getTraceId, traceId)
+                            .last("LIMIT 1"));
+            if (restore != null) {
+                assertEquals(expectedBusinessType, restore.getBusinessType());
+                assertEquals(1, restore.getChangeQty());
+                return true;
+            }
+            Thread.sleep(100);
+        }
+        return false;
+    }
+
+    private Long reconcileLogCount(Long voucherId) {
+        return voucherReconcileLogMapper.selectCount(new LambdaQueryWrapper<VoucherReconcileLog>()
+                .eq(VoucherReconcileLog::getVoucherId, voucherId));
     }
 
     private void sendRawMessage(SeckillOrderMessage message, long timestamp) {

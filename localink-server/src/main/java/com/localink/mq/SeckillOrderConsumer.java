@@ -46,12 +46,13 @@ public class SeckillOrderConsumer extends AbstractKafkaConsumer<SeckillOrderMess
         }
         log.warn("超龄消息丢弃并回滚资格, orderId={}, ageMs={}", payload.orderId(), ageMs);
         voucherOrderService.rollbackSeckillQualification(payload.voucherId(), payload.userId(),
+                payload.orderId(), payload.traceId(),
                 "STALE_DROP", "stale message dropped, ageMs=" + ageMs);
         return false;
     }
 
     @Override
     protected void doConsume(SeckillOrderMessage payload, MessageEnvelope<SeckillOrderMessage> envelope) {
-        voucherOrderService.createSeckillOrder(payload);
+        voucherOrderService.createSeckillOrder(payload, envelope.getMessageId());
     }
 }
