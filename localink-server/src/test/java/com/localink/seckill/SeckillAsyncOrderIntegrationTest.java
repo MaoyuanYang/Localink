@@ -8,12 +8,14 @@ import com.localink.constant.KeyManage;
 import com.localink.entity.SeckillVoucher;
 import com.localink.entity.User;
 import com.localink.entity.VoucherOrder;
+import com.localink.entity.VoucherReconcileLog;
 import com.localink.framework.holder.UserHolder;
 import com.localink.framework.seckill.SeckillStockCache;
 import com.localink.mapper.SeckillVoucherMapper;
 import com.localink.mapper.UserMapper;
 import com.localink.mapper.VoucherMapper;
 import com.localink.mapper.VoucherOrderMapper;
+import com.localink.mapper.VoucherReconcileLogMapper;
 import com.localink.mq.MessageProducer;
 import com.localink.mq.MqTopics;
 import com.localink.mq.SeckillOrderMessage;
@@ -68,6 +70,9 @@ class SeckillAsyncOrderIntegrationTest {
     private VoucherOrderMapper voucherOrderMapper;
 
     @Autowired
+    private VoucherReconcileLogMapper voucherReconcileLogMapper;
+
+    @Autowired
     private UserMapper userMapper;
 
     @Autowired
@@ -104,6 +109,8 @@ class SeckillAsyncOrderIntegrationTest {
         issuedTokens.forEach(token -> redisCache.delete(keyBuilder.build(KeyManage.USER_TOKEN, token)));
         createdVoucherIds.forEach(id -> {
             voucherOrderMapper.delete(new LambdaQueryWrapper<VoucherOrder>().eq(VoucherOrder::getVoucherId, id));
+            voucherReconcileLogMapper.delete(new LambdaQueryWrapper<VoucherReconcileLog>()
+                    .eq(VoucherReconcileLog::getVoucherId, id));
             seckillStockCache.evict(id);
             seckillVoucherMapper.delete(new LambdaQueryWrapper<SeckillVoucher>().eq(SeckillVoucher::getVoucherId, id));
             voucherMapper.deleteById(id);
@@ -138,18 +145,28 @@ class SeckillAsyncOrderIntegrationTest {
         assertNotNull(OrderAwait.awaitById(voucherOrderMapper, Long.valueOf(firstOrderId)));
         assertEquals(4, selectSeckill(voucherId).getStock());
 
-        // 同 orderId 重复投递（守卫应忽略）+ 尾随标记消息（同 key 同分区 FIFO，标记落库即证明重复消息已被处理）
+        // 同 orderId 重复投递（守卫应忽略；traceId 缺失模拟旧格式消息）+ 尾随标记消息（同 key 同分区 FIFO，标记落库即证明重复消息已被处理）
         messageProducer.sendSync(MqTopics.SECKILL_ORDER, String.valueOf(voucherId),
-                new SeckillOrderMessage(Long.valueOf(firstOrderId), voucherId, 2, userId));
+                new SeckillOrderMessage(Long.valueOf(firstOrderId), voucherId, 2, userId, null, null, null));
         long markerOrderId = com.baomidou.mybatisplus.core.toolkit.IdWorker.getId();
         messageProducer.sendSync(MqTopics.SECKILL_ORDER, String.valueOf(voucherId),
-                new SeckillOrderMessage(markerOrderId, voucherId, 2, userBId));
+                new SeckillOrderMessage(markerOrderId, voucherId, 2, userBId, null, null, null));
         assertNotNull(OrderAwait.awaitById(voucherOrderMapper, markerOrderId), "标记消息应落库");
 
         Long count = voucherOrderMapper.selectCount(new LambdaQueryWrapper<VoucherOrder>()
                 .eq(VoucherOrder::getVoucherId, voucherId));
         assertEquals(2L, count, "重复消息应被守卫忽略，只新增标记订单");
         assertEquals(3, selectSeckill(voucherId).getStock());
+        assertEquals(2L, voucherReconcileLogMapper.selectCount(new LambdaQueryWrapper<VoucherReconcileLog>()
+                        .eq(VoucherReconcileLog::getVoucherId, voucherId)),
+                "重投不得双写流水：两单各一条扣减行");
+        VoucherReconcileLog markerLog = voucherReconcileLogMapper.selectOne(
+                new LambdaQueryWrapper<VoucherReconcileLog>()
+                        .eq(VoucherReconcileLog::getOrderId, markerOrderId)
+                        .eq(VoucherReconcileLog::getLogType, 1));
+        assertNotNull(markerLog, "标记单应有扣减流水行");
+        assertEquals(markerOrderId, markerLog.getTraceId(), "traceId 缺失的消息以 orderId 顶替落账");
+        assertNotNull(markerLog.getMessageId(), "扣减行应携带消息 UUID");
     }
 
     private Long registerSecondUser() {
