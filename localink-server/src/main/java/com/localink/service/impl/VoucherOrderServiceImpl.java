@@ -253,12 +253,13 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
 
     /**
      * 恢复流水行（logType=2）：回滚成功后落；STALE_DROP 归"下单超时"，其余归"下单失败"。
-     * traceId 缺失（旧消息/手工消息）时以 orderId 顶替（同扣减行先例）。
+     * traceId 缺失（旧消息/手工消息）时以 orderId 顶替、orderId 缺失（消息全丢的对账补偿/失败表重试）
+     * 时以 traceId 顶替——两者皆雪花数值，列 NOT NULL 约束下的合法占位。
      */
     private VoucherReconcileLog buildRestoreLog(Long voucherId, Long userId, Long orderId, Long traceId,
                                                 String source, String detail, int before, int after) {
         VoucherReconcileLog logRow = new VoucherReconcileLog();
-        logRow.setOrderId(orderId);
+        logRow.setOrderId(Objects.requireNonNullElse(orderId, traceId));
         logRow.setUserId(userId);
         logRow.setVoucherId(voucherId);
         logRow.setTraceId(Objects.requireNonNullElse(traceId, orderId));

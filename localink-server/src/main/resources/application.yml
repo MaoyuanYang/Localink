@@ -93,3 +93,8 @@ localink:
         url: jdbc:mysql://localhost:3306/localink_1?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
         username: root
         password: localink123
+  reconcile:
+    enabled: true
+    interval-ms: 300000
+    grace-minutes: 2
+    failure-age-alarm-hours: 24
