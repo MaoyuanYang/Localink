@@ -33,7 +33,7 @@
         <mybatis-plus.version>3.5.7</mybatis-plus.version>
         <redisson.version>3.52.0</redisson.version>
         <caffeine.version>3.2.2</caffeine.version>
-        <shardingsphere.version>5.3.2</shardingsphere.version>
+        <shardingsphere.version>5.5.1</shardingsphere.version>
         <hutool.version>5.8.25</hutool.version>
         <fastjson2.version>2.0.53</fastjson2.version>
         <knife4j.version>4.5.0</knife4j.version>
@@ -79,7 +79,7 @@
             </dependency>
             <dependency>
                 <groupId>org.apache.shardingsphere</groupId>
-                <artifactId>shardingsphere-jdbc-core</artifactId>
+                <artifactId>shardingsphere-jdbc</artifactId>
                 <version>${shardingsphere.version}</version>
             </dependency>
             <dependency>
