@@ -29,7 +29,7 @@
 | 数据库 | MySQL | 8.x |
 | 缓存 | Redis + Redisson + Caffeine | 7.x / 3.52.x |
 | 消息队列 | Kafka | 3.x |
-| 分库分表 | ShardingSphere-JDBC | 5.3.2 |
+| 分库分表 | ShardingSphere-JDBC | 5.5.1（M4.4 由 5.3.2 升级：snakeyaml 2.x 兼容） |
 | 搜索 | Elasticsearch（M6 引入） | 8.x |
 | 工具 | Lombok / Hutool / fastjson2 / Knife4j | — |
 | 根包名 | `com.localink` | — |
