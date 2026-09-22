@@ -281,7 +281,7 @@ erDiagram
 
 ### 4.12 lk_rollback_failure_log（回滚失败日志表）
 
-对应需求：F-TRD-05。Redis 回滚（DEL 库存 key 回源）指数退避重试终失败后落表，供告警与人工补偿，M5.2 启用。
+对应需求：F-TRD-05。Redis 回滚（逆增量 INCRBY+SREM，M3.6 定案——本项目无懒回源，DEL 回源不适用）终失败后落表，source 区分来源（REQUEST_SEND/CONSUME_EXHAUSTED/STALE_DROP），M3.11 起写入，供告警与人工补偿。
 
 | 字段 | 类型 | 空 | 默认 | 说明 |
 |---|---|---|---|---|

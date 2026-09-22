@@ -14,6 +14,8 @@ import com.localink.idempotent.RepeatExecuteLimit;
 import com.localink.mapper.SeckillVoucherMapper;
 import com.localink.mapper.VoucherMapper;
 import com.localink.mapper.VoucherOrderMapper;
+import com.localink.mapper.RollbackFailureLogMapper;
+import com.localink.entity.RollbackFailureLog;
 import com.localink.mq.MessageProducer;
 import com.localink.mq.MqTopics;
 import com.localink.mq.SeckillOrderMessage;
@@ -47,6 +49,7 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
     private final VoucherMapper voucherMapper;
     private final SeckillVoucherMapper seckillVoucherMapper;
     private final VoucherOrderMapper voucherOrderMapper;
+    private final RollbackFailureLogMapper rollbackFailureLogMapper;
     private final RedisCache redisCache;
     private final SeckillStockCache seckillStockCache;
     private final RedisScript<Long> seckillDeductScript;
@@ -68,7 +71,8 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
         try {
             messageProducer.sendSync(MqTopics.SECKILL_ORDER, String.valueOf(voucherId), message);
         } catch (RuntimeException e) {
-            rollbackRedis(voucherId, userId);
+            rollbackSeckillQualification(voucherId, userId, "REQUEST_SEND",
+                    "seckill send failed: " + e.getMessage());
             throw e;
         }
         return String.valueOf(orderId);
@@ -127,17 +131,31 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
     }
 
     /**
-     * 请求路径的即时补偿：Lua 已扣 Redis 但消息发送失败时逆向回加（幂等）。
-     * 消费端失败的回滚属 M3.11（重试耗尽才回滚才正确），对账兜底属 M3.12。
+     * 统一回滚入口（M3.11）：请求发送失败（立即）/ 消费重试耗尽（recoverer）/ 超龄丢弃（beforeConsume）
+     * 三处共用。逆增量 Lua 幂等可重试；执行失败落 lk_rollback_failure_log 供 M5.2 补偿告警。
      */
-    private void rollbackRedis(Long voucherId, Long userId) {
+    @Override
+    public void rollbackSeckillQualification(Long voucherId, Long userId, String source, String detail) {
         try {
             redisCache.scripts().execute(seckillRollbackScript,
                     List.of(seckillStockCache.stockKey(voucherId), seckillStockCache.orderUsersKey(voucherId)),
                     String.valueOf(userId));
         } catch (Exception e) {
-            log.error("秒杀 Redis 补偿失败, 待对账兜底, voucherId={}, userId={}", voucherId, userId, e);
+            log.error("秒杀 Redis 回滚失败, 已落失败表待补偿, voucherId={}, userId={}, source={}",
+                    voucherId, userId, source, e);
+            RollbackFailureLog failureLog = new RollbackFailureLog();
+            failureLog.setVoucherId(voucherId);
+            failureLog.setUserId(userId);
+            failureLog.setRetryAttempts(0);
+            failureLog.setSource(source);
+            failureLog.setDetail(detail + " | rollback error: " + e.getMessage());
+            rollbackFailureLogMapper.insert(failureLog);
         }
+    }
+
+    @Override
+    public boolean seckillOrderExists(Long orderId) {
+        return voucherOrderMapper.selectById(orderId) != null;
     }
 
     private Voucher requireSeckillVoucher(Long voucherId) {
