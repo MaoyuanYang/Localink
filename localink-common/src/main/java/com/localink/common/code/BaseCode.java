@@ -31,6 +31,7 @@ public enum BaseCode {
     LOCK_TIMEOUT(40005, "操作繁忙，请稍后重试"),
     MQ_SEND_FAILED(40006, "消息发送失败"),
     IDEMPOTENT_DUPLICATE(40007, "请勿重复提交"),
+    RATE_LIMITED(40008, "请求过于频繁，请稍后再试"),
 
     SHOP_TYPE_IN_USE(50001, "该类型下仍有商户，无法删除");
 

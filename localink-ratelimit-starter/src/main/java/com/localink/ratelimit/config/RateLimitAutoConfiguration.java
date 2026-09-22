@@ -1,7 +1,11 @@
 package com.localink.ratelimit.config;
 
+import com.localink.ratelimit.RateLimitAdmin;
 import com.localink.ratelimit.RateLimiter;
+import com.localink.ratelimit.aspect.RateLimitAspect;
 import com.localink.ratelimit.impl.RedisRateLimiter;
+import com.localink.ratelimit.user.RateLimitUserResolver;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -46,5 +50,20 @@ public class RateLimitAutoConfiguration {
                                    RedisScript<String> slidingWindowScript,
                                    RateLimitProperties properties) {
         return new RedisRateLimiter(redisTemplate, tokenBucketScript, slidingWindowScript, properties);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(RateLimitAdmin.class)
+    public RateLimitAdmin rateLimitAdmin(StringRedisTemplate redisTemplate, RateLimitProperties properties) {
+        return new RateLimitAdmin(redisTemplate, properties.getKeyPrefix());
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(RateLimitAspect.class)
+    public RateLimitAspect rateLimitAspect(RateLimiter rateLimiter,
+                                           RateLimitAdmin rateLimitAdmin,
+                                           RateLimitProperties properties,
+                                           ObjectProvider<RateLimitUserResolver> userResolverProvider) {
+        return new RateLimitAspect(rateLimiter, rateLimitAdmin, properties, userResolverProvider);
     }
 }

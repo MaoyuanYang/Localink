@@ -73,3 +73,9 @@ localink:
         shop:
           maximum-size: 1000
           expire-after-write: 10s
+  ratelimit:
+    scenes:
+      sms-send:
+        algorithm: SLIDING_WINDOW
+        threshold: 1
+        window: 60s
