@@ -30,11 +30,22 @@ class DatasourceSmokeTest {
     }
 
     @Test
-    void allTwelveTablesExist() {
-        Integer count = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'localink' AND table_name LIKE 'lk\\_%'",
-                Integer.class);
-        assertNotNull(count);
-        assertEquals(12, count);
+    void allTablesExistInM4ShardedLayout() throws Exception {
+        // M4 分片后：ds_0（localink）= 11 单表 + 订单域 2×2 分片表 + 路由表 = 15；ds_1（localink_1）= 订单域 4 张
+        assertEquals(15, physicalTableCount("localink"), "ds_0：11 单表 + 4 分片表 + 1 路由表");
+        assertEquals(4, physicalTableCount("localink_1"), "ds_1：仅订单域分片表");
+    }
+
+    private int physicalTableCount(String schema) throws Exception {
+        try (java.sql.Connection connection = java.sql.DriverManager.getConnection(
+                "jdbc:mysql://localhost:3306/" + schema + "?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true",
+                "root", "localink123");
+             java.sql.Statement statement = connection.createStatement();
+             java.sql.ResultSet rs = statement.executeQuery(
+                     "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='" + schema
+                             + "' AND table_name LIKE 'lk\\_%'")) {
+            rs.next();
+            return rs.getInt(1);
+        }
     }
 }
