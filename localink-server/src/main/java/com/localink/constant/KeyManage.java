@@ -67,6 +67,13 @@ public enum KeyManage implements KeyTemplate {
     SECKILL_ORDER_USERS("seckill:order:{%s}", null, "秒杀已购用户集合（Set，hash tag 同槽，一人一单 Lua 原子判重）"),
 
     /**
+     * 券 ID → 秒杀对账流水（Hash，field=traceId，value=JSON 账目）。与 SECKILL_STOCK 同槽，
+     * 扣减/恢复 Lua 与账目变更同脚本原子写入（M3.12）。field 保留该笔资格的最新态
+     * （logType 1 扣减 → 2 恢复），明细账在 lk_voucher_reconcile_log；TTL 跟随活动，活动后 Redis 活账清空。
+     */
+    SECKILL_FLOW("seckill:flow:{%s}", null, "秒杀对账流水（Hash，field=traceId→JSON 账目，hash tag 同槽；Lua 与扣减/恢复同原子写，M5.1 对账数据地基）"),
+
+    /**
      * 幂等结果标记（String，JSON 结果，TTL 由注解 markerTtl 决定）。
      * 实际 key 由 idempotent-starter 前缀生成：lk:idem:marker:{name}:{key}——注解常量无法引用枚举，
      * 此登记为文档对齐与 redis-cli 观测入口（同 SECKILL_ORDER_LOCK 先例）。

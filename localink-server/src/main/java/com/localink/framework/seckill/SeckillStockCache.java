@@ -35,10 +35,10 @@ public class SeckillStockCache {
     }
 
     /**
-     * 删除库存与已购集合两 key（券删除时调用）。
+     * 删除库存、已购集合与流水三 key（券删除时调用）。
      */
     public void evict(Long voucherId) {
-        redisCache.delete(List.of(stockKey(voucherId), orderUsersKey(voucherId)));
+        redisCache.delete(List.of(stockKey(voucherId), orderUsersKey(voucherId), flowKey(voucherId)));
     }
 
     public KeyBuild stockKey(Long voucherId) {
@@ -47,6 +47,10 @@ public class SeckillStockCache {
 
     public KeyBuild orderUsersKey(Long voucherId) {
         return keyBuilder.build(KeyManage.SECKILL_ORDER_USERS, voucherId);
+    }
+
+    public KeyBuild flowKey(Long voucherId) {
+        return keyBuilder.build(KeyManage.SECKILL_FLOW, voucherId);
     }
 
     private static Duration ttlTo(LocalDateTime endTime) {
