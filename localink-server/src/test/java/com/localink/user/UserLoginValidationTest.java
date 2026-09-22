@@ -23,7 +23,7 @@ class UserLoginValidationTest {
 
     @Test
     void missingCodeReturnsParamError() throws Exception {
-        mockMvc.perform(post("/api/user/login")
+        mockMvc.perform(post("/api/user/login").accept(MediaType.APPLICATION_JSON)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"phone\":\"13800138000\"}"))
                 .andExpect(status().isOk())
@@ -33,7 +33,7 @@ class UserLoginValidationTest {
 
     @Test
     void malformedCodeReturnsParamError() throws Exception {
-        mockMvc.perform(post("/api/user/login")
+        mockMvc.perform(post("/api/user/login").accept(MediaType.APPLICATION_JSON)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"phone\":\"13800138000\",\"code\":\"abc\"}"))
                 .andExpect(status().isOk())

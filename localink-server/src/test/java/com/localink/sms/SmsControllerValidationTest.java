@@ -25,6 +25,7 @@ class SmsControllerValidationTest {
     void invalidPhoneReturnsParamError() throws Exception {
         mockMvc.perform(post("/api/sms/code")
                         .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
                         .content("{\"phone\":\"12345\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(BaseCode.PARAM_ERROR.getCode()))
@@ -35,6 +36,7 @@ class SmsControllerValidationTest {
     void blankPhoneReturnsParamError() throws Exception {
         mockMvc.perform(post("/api/sms/code")
                         .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
                         .content("{\"phone\":\"\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(BaseCode.PARAM_ERROR.getCode()));

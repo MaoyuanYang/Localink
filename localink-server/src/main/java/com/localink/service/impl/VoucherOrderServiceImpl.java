@@ -61,9 +61,11 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
     private final VoucherOrderMapper voucherOrderMapper;
     private final VoucherReconcileLogMapper voucherReconcileLogMapper;
     private final RollbackFailureLogMapper rollbackFailureLogMapper;
+    private final com.localink.mapper.OrderRouteMapper orderRouteMapper;
     private final RedisCache redisCache;
     private final SeckillStockCache seckillStockCache;
     private final com.localink.framework.seckill.SeckillTokenService seckillTokenService;
+    private final com.localink.id.SnowflakeIdGenerator snowflakeIdGenerator;
     private final RedisScript<String> seckillDeductScript;
     private final RedisScript<String> seckillRollbackScript;
     private final MessageProducer messageProducer;
@@ -81,8 +83,8 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
         requireUserLevel(seckill.getMinLevel());
         Long userId = UserHolder.get().getId();
 
-        long orderId = IdWorker.getId();
-        long traceId = IdWorker.getId();
+        long orderId = snowflakeIdGenerator.nextId();
+        long traceId = snowflakeIdGenerator.nextId();
         DeductAccount account = deductInRedis(voucherId, userId, traceId, seckill.getEndTime());
 
         SeckillOrderMessage message = new SeckillOrderMessage(orderId, voucherId, voucher.getType(),
@@ -121,6 +123,7 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
         try {
             voucherOrderMapper.insert(order);
             voucherReconcileLogMapper.insert(buildDeductLog(message, messageId));
+            orderRouteMapper.insert(buildRoute(message));
         } catch (DuplicateKeyException e) {
             log.info("唯一索引拦截重复建单（守卫与插入间隙的竞态）, orderId={}", message.orderId());
         }
@@ -200,6 +203,32 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
     @Override
     public boolean seckillOrderExists(Long orderId) {
         return voucherOrderMapper.selectById(orderId) != null;
+    }
+
+    /**
+     * M4.5 反查：路由表取分片键 → 计算物理位置（库 user_id%2、表 voucher_id%2）→ 带键精确查询。
+     * 路由行缺失（跨库写缝隙）返回 null 位置信息并以广播兜底查存在性。
+     */
+    @Override
+    public OrderLocation locateOrder(Long orderId) {
+        com.localink.entity.OrderRoute route = orderRouteMapper.selectOne(
+                new LambdaQueryWrapper<com.localink.entity.OrderRoute>()
+                        .eq(com.localink.entity.OrderRoute::getOrderId, orderId).last("LIMIT 1"));
+        if (route == null) {
+            return new OrderLocation(orderId, null, null, null, null, seckillOrderExists(orderId));
+        }
+        String dataSource = "ds_" + (Math.floorMod(route.getUserId(), 2));
+        String physicalTable = "lk_voucher_order_" + (Math.floorMod(route.getVoucherId(), 2));
+        return new OrderLocation(orderId, route.getUserId(), route.getVoucherId(),
+                dataSource, physicalTable, seckillOrderExists(orderId));
+    }
+
+    private com.localink.entity.OrderRoute buildRoute(SeckillOrderMessage message) {
+        com.localink.entity.OrderRoute route = new com.localink.entity.OrderRoute();
+        route.setOrderId(message.orderId());
+        route.setUserId(message.userId());
+        route.setVoucherId(message.voucherId());
+        return route;
     }
 
     /**

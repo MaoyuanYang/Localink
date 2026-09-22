@@ -15,5 +15,27 @@
             <groupId>com.localink</groupId>
             <artifactId>localink-common</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.apache.shardingsphere</groupId>
+            <artifactId>shardingsphere-jdbc</artifactId>
+            <exclusions>
+                <exclusion>
+                    <!-- 5.5.0 已知发布缺失：test-util 未上 central；测试支撑件，运行时不需要 -->
+                    <groupId>org.apache.shardingsphere</groupId>
+                    <artifactId>shardingsphere-test-util</artifactId>
+                </exclusion>
+                <!-- jackson-dataformat-xml 是 SS 运行时必需（内部用 XmlMapper），不可排除；
+                     其副作用（MVC 把 Result 协商成 XML）由 server 的 WebJsonOnlyConfig 移除 XML converter 解决 -->
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-jdbc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 </project>

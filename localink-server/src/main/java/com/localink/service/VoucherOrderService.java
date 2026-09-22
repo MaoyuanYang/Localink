@@ -40,4 +40,16 @@ public interface VoucherOrderService {
      * 订单是否已落库（超龄丢弃/耗尽回滚前的源真相判据——幂等标记允许写失败降级，不可作判据）。
      */
     boolean seckillOrderExists(Long orderId);
+
+    /**
+     * M4.5 反查订单位置：路由表定位物理库表；路由缺失（跨库写缝隙）位置字段为 null、广播兜底存在性。
+     */
+    OrderLocation locateOrder(Long orderId);
+
+    /**
+     * 订单物理位置（分片反查结果）。
+     */
+    record OrderLocation(Long orderId, Long userId, Long voucherId,
+                         String dataSource, String physicalTable, boolean orderExists) {
+    }
 }

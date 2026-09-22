@@ -23,7 +23,7 @@ class GlobalExceptionHandlerTest {
 
     @Test
     void businessExceptionReturnsHttp200WithBusinessCode() throws Exception {
-        mockMvc.perform(get("/test/business"))
+        mockMvc.perform(get("/test/business").accept(org.springframework.http.MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(BaseCode.PARAM_ERROR.getCode()))
                 .andExpect(jsonPath("$.message").value("手机号格式不正确"));
@@ -31,14 +31,14 @@ class GlobalExceptionHandlerTest {
 
     @Test
     void noResourceFoundReturnsHttp404() throws Exception {
-        mockMvc.perform(get("/test/not-found"))
+        mockMvc.perform(get("/test/not-found").accept(org.springframework.http.MediaType.APPLICATION_JSON))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value(BaseCode.NOT_FOUND.getCode()));
     }
 
     @Test
     void unknownExceptionReturnsHttp500WithoutStackTrace() throws Exception {
-        mockMvc.perform(get("/test/system"))
+        mockMvc.perform(get("/test/system").accept(org.springframework.http.MediaType.APPLICATION_JSON))
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.code").value(BaseCode.SYSTEM_ERROR.getCode()))
                 .andExpect(jsonPath("$.message").value(BaseCode.SYSTEM_ERROR.getMessage()));
