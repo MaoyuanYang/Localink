@@ -3,6 +3,9 @@ package com.localink.controller;
 import com.localink.api.dto.SeckillVoucherDTO;
 import com.localink.api.vo.SeckillVoucherVO;
 import com.localink.common.result.Result;
+import com.localink.framework.seckill.SeckillTokenService;
+import com.localink.ratelimit.Dimension;
+import com.localink.ratelimit.RateLimit;
 import com.localink.service.SeckillVoucherService;
 import com.localink.service.VoucherOrderService;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +30,8 @@ public class SeckillVoucherController {
     private final SeckillVoucherService seckillVoucherService;
 
     private final VoucherOrderService voucherOrderService;
+
+    private final SeckillTokenService seckillTokenService;
 
     @PostMapping
     public Result<String> create(@Validated @RequestBody SeckillVoucherDTO dto) {
@@ -55,8 +60,18 @@ public class SeckillVoucherController {
         return Result.ok(seckillVoucherService.listByShop(shopId));
     }
 
+    /**
+     * 抢购令牌申请（M3.15 流量闸门）：双维度限流（IP 宽、用户严）后发放 30s 一次性令牌。
+     */
+    @RateLimit(scene = "seckill-token", dimensions = {Dimension.IP, Dimension.USER})
+    @PostMapping("/{voucherId}/token")
+    public Result<String> issueToken(@PathVariable Long voucherId) {
+        return Result.ok(seckillTokenService.issue(voucherId,
+                com.localink.framework.holder.UserHolder.get().getId()));
+    }
+
     @PostMapping("/{voucherId}/seckill")
-    public Result<String> seckill(@PathVariable Long voucherId) {
-        return Result.ok(voucherOrderService.seckill(voucherId));
+    public Result<String> seckill(@PathVariable Long voucherId, @RequestParam String token) {
+        return Result.ok(voucherOrderService.seckill(voucherId, token));
     }
 }

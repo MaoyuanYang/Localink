@@ -42,6 +42,12 @@ public class GlobalExceptionHandler {
         return Result.fail(BaseCode.PARAM_ERROR, "请求体格式错误");
     }
 
+    @ExceptionHandler(org.springframework.web.bind.MissingServletRequestParameterException.class)
+    public Result<Void> handleMissingParam(org.springframework.web.bind.MissingServletRequestParameterException e) {
+        log.warn("缺少请求参数: {}", e.getParameterName());
+        return Result.fail(BaseCode.PARAM_ERROR, "缺少请求参数: " + e.getParameterName());
+    }
+
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<Result<Void>> handleNoResourceFound(NoResourceFoundException e) {
         log.warn("资源不存在: {}", e.getResourcePath());

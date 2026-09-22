@@ -63,9 +63,16 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
     private final RollbackFailureLogMapper rollbackFailureLogMapper;
     private final RedisCache redisCache;
     private final SeckillStockCache seckillStockCache;
+    private final com.localink.framework.seckill.SeckillTokenService seckillTokenService;
     private final RedisScript<String> seckillDeductScript;
     private final RedisScript<String> seckillRollbackScript;
     private final MessageProducer messageProducer;
+
+    @Override
+    public String seckill(Long voucherId, String token) {
+        seckillTokenService.consume(voucherId, UserHolder.get().getId(), token);
+        return seckill(voucherId);
+    }
 
     @Override
     public String seckill(Long voucherId) {

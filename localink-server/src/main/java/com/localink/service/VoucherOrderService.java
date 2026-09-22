@@ -5,7 +5,16 @@ import com.localink.mq.SeckillOrderMessage;
 public interface VoucherOrderService {
 
     /**
+     * 秒杀下单（异步版，令牌前置入口 M3.15）：一次性消费前置令牌 → 校验 → Lua 原子扣减+流水
+     * → 发 Kafka 消息 → 返回预生成订单 ID。Controller 层唯一入口。
+     *
+     * @param token 申请接口发放的一次性令牌
+     */
+    String seckill(Long voucherId, String token);
+
+    /**
      * 秒杀下单（异步版）：校验 → Lua 原子扣减+流水 → 发 Kafka 消息 → 返回预生成订单 ID。
+     * 令牌闸门之前的内部入口（测试与补偿链路直调，外部请求一律走 {@link #seckill(Long, String)}）。
      * 建单由 {@link #createSeckillOrder(SeckillOrderMessage, String)} 在消费端异步完成。
      */
     String seckill(Long voucherId);
