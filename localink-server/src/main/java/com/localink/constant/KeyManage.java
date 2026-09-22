@@ -83,7 +83,15 @@ public enum KeyManage implements KeyTemplate {
     /**
      * 幂等分布式公平锁（与 marker 同名空间）。实际 key：lk:idem:lock:{name}:{key}。
      */
-    IDEMPOTENT_LOCK("idem:lock:%s:%s", null, "幂等分布式公平锁（@RepeatExecuteLimit 生成 lk:idem:lock:{name}:{key}，此处为文档对齐）");
+    IDEMPOTENT_LOCK("idem:lock:%s:%s", null, "幂等分布式公平锁（@RepeatExecuteLimit 生成 lk:idem:lock:{name}:{key}，此处为文档对齐）"),
+
+    /**
+     * 限流状态 key（M3.13 ratelimit-starter 生成，前缀独立不经 KeyBuilder）：
+     * 令牌桶 lk:rl:tb:{scene}:{dimension}（Hash：tokens/last）、滑动窗口 lk:rl:sw:{scene}:{dimension}
+     * （ZSet：member=请求标识，score=毫秒）。空闲 TTL 自动清理（桶=补满耗时×2 下限 60s；窗=窗口长+60s）。
+     * 登记为文档对齐与 redis-cli 观测入口（同 IDEMPOTENT_MARKER 先例）。
+     */
+    RATELIMIT_STATE("rl:%s:%s", null, "限流状态（ratelimit-starter 生成 lk:rl:tb:*/lk:rl:sw:*，此处为文档对齐）");
 
     private final String template;
     private final Duration ttl;
