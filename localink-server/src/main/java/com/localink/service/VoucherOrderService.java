@@ -42,6 +42,14 @@ public interface VoucherOrderService {
     boolean seckillOrderExists(Long orderId);
 
     /**
+     * M5-B 超时关单（延迟任务到期触发）：条件关单（仅"已创建"可关，幂等闸门）
+     * → DB 库存逆增量回补 → Redis 资格回滚（复用统一回滚：库存+1/出集合/流水翻恢复，失败落失败表）。
+     *
+     * @return true 本次实际关闭并回流；false 已关/已取消/不存在（幂等跳过）
+     */
+    boolean closeOrderIfExpired(Long orderId);
+
+    /**
      * M4.5 反查订单位置：路由表定位物理库表；路由缺失（跨库写缝隙）位置字段为 null、广播兜底存在性。
      */
     OrderLocation locateOrder(Long orderId);
