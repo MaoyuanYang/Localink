@@ -1,9 +1,14 @@
 server:
   port: 8086
 
+
 spring:
   application:
     name: localink-server
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 10MB
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://localhost:3306/localink?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
@@ -106,3 +111,7 @@ localink:
     shards: 2
   order:
     close-delay: 15m
+  storage:
+    type: local
+    dir: ./upload
+    url-prefix: "/upload"
