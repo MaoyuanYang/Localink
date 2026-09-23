@@ -22,3 +22,6 @@ application-local.properties
 
 # JMeter 本地产出（token/JTL，见 scripts/jmeter/README.md）
 scripts/jmeter/results/
+
+# M6-A 本地存储目录（运行期上传产物）
+localink-server/upload/
