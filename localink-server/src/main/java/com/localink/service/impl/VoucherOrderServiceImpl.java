@@ -66,9 +66,13 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
     private final SeckillStockCache seckillStockCache;
     private final com.localink.framework.seckill.SeckillTokenService seckillTokenService;
     private final com.localink.id.SnowflakeIdGenerator snowflakeIdGenerator;
+    private final com.localink.delay.DelayQueuePublisher delayQueuePublisher;
     private final RedisScript<String> seckillDeductScript;
     private final RedisScript<String> seckillRollbackScript;
     private final MessageProducer messageProducer;
+
+    @org.springframework.beans.factory.annotation.Value("${localink.order.close-delay:15m}")
+    private java.time.Duration orderCloseDelay;
 
     @Override
     public String seckill(Long voucherId, String token) {
@@ -126,7 +130,12 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
             orderRouteMapper.insert(buildRoute(message));
         } catch (DuplicateKeyException e) {
             log.info("唯一索引拦截重复建单（守卫与插入间隙的竞态）, orderId={}", message.orderId());
+            return;
         }
+        // M5-B：超时关单延迟任务（orderId 分片路由）。事务内投递——若事务回滚则任务空转，
+        // 消费端条件关单（status=1 才关）天然幂等，空转无副作用；投递失败仅日志不阻断建单
+        delayQueuePublisher.offerSharded(com.localink.mq.DelayTopics.ORDER_CLOSE,
+                message.orderId(), String.valueOf(message.orderId()), orderCloseDelay);
     }
 
     /**
@@ -206,6 +215,38 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
     }
 
     /**
+     * M5-B 超时关单：条件关单（affected=0 即已处置，直接跳过——重投/多投/空转任务的幂等闸门）
+     * → DB 库存逆增量回补 → 复用统一回滚退 Redis 资格（库存+1/出集合/流水翻恢复+恢复行）。
+     * Redis 回滚失败由统一入口落失败表（M5-A 对账重试收敛）——关单链路的兜底闭环复用自既有体系。
+     */
+    @Override
+    public boolean closeOrderIfExpired(Long orderId) {
+        VoucherOrder order = voucherOrderMapper.selectById(orderId);
+        if (order == null) {
+            return false;
+        }
+        int closed = voucherOrderMapper.closeIfCreated(orderId);
+        if (closed == 0) {
+            log.info("关单跳过（订单已非创建态或已处置）, orderId={}, status={}", orderId, order.getStatus());
+            return false;
+        }
+        seckillVoucherMapper.restoreStock(order.getVoucherId());
+        Long traceId = resolveTraceId(orderId);
+        rollbackSeckillQualification(order.getVoucherId(), order.getUserId(), orderId, traceId,
+                "ORDER_CLOSE", "order expired and closed by delay task");
+        return true;
+    }
+
+    private Long resolveTraceId(Long orderId) {
+        VoucherReconcileLog deductRow = voucherReconcileLogMapper.selectOne(
+                new LambdaQueryWrapper<VoucherReconcileLog>()
+                        .eq(VoucherReconcileLog::getOrderId, orderId)
+                        .eq(VoucherReconcileLog::getLogType, 1)
+                        .last("LIMIT 1"));
+        return deductRow == null ? orderId : deductRow.getTraceId();
+    }
+
+    /**
      * M4.5 反查：路由表取分片键 → 计算物理位置（库 user_id%2、表 voucher_id%2）→ 带键精确查询。
      * 路由行缺失（跨库写缝隙）返回 null 位置信息并以广播兜底查存在性。
      */
@@ -264,7 +305,8 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
         logRow.setVoucherId(voucherId);
         logRow.setTraceId(Objects.requireNonNullElse(traceId, orderId));
         logRow.setLogType(LOG_TYPE_RESTORE);
-        logRow.setBusinessType("STALE_DROP".equals(source) ? BUSINESS_ORDER_TIMEOUT : BUSINESS_ORDER_FAIL);
+        logRow.setBusinessType("STALE_DROP".equals(source) || "ORDER_CLOSE".equals(source)
+                ? BUSINESS_ORDER_TIMEOUT : BUSINESS_ORDER_FAIL);
         logRow.setBeforeQty(before);
         logRow.setChangeQty(1);
         logRow.setAfterQty(after);

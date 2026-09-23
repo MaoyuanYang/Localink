@@ -98,7 +98,14 @@ public enum KeyManage implements KeyTemplate {
      * （ZSet：member=请求标识，score=毫秒）。空闲 TTL 自动清理（桶=补满耗时×2 下限 60s；窗=窗口长+60s）。
      * 登记为文档对齐与 redis-cli 观测入口（同 IDEMPOTENT_MARKER 先例）。
      */
-    RATELIMIT_STATE("rl:%s:%s", null, "限流状态（ratelimit-starter 生成 lk:rl:tb:*/lk:rl:sw:*，此处为文档对齐）");
+    RATELIMIT_STATE("rl:%s:%s", null, "限流状态（ratelimit-starter 生成 lk:rl:tb:*/lk:rl:sw:*，此处为文档对齐）"),
+
+    /**
+     * 延迟队列（M5-B delay-starter 生成，Redisson 命名空间不经 KeyBuilder）：
+     * lk:delay:{base}:{shard}——RDelayedQueue 绑定目标 RBlockingQueue，每分片一个消费线程。
+     * 登记为文档对齐与 redis-cli 观测入口（同 RATELIMIT_STATE 先例）。
+     */
+    DELAY_QUEUE("delay:%s:%s", null, "延迟队列（delay-starter 生成 lk:delay:{base}:{shard}，此处为文档对齐）");
 
     private final String template;
     private final Duration ttl;

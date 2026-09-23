@@ -113,7 +113,8 @@ public class ReconciliationJob {
                         compensate(voucherId, userId, traceId);
                         compensated++;
                     } else {
-                        flipped += settleConsistentTrace(deductRow);
+                        compensated += settleAccordingToOrderState(deductRow, voucherId, userId, traceId,
+                                flow.getLongValue("ts"));
                     }
                 }
             }
@@ -121,6 +122,28 @@ public class ReconciliationJob {
         retryRollbackFailures();
         log.info("对账完成: 差异补偿={}笔, 状态翻牌={}笔", compensated, flipped);
         return compensated;
+    }
+
+    /**
+     * 按订单终态裁决（M5-B 联动补强）：已取消/已关闭订单的扣减资格必须已回滚（流水应翻 logType=2）——
+     * 终态订单配 logType=1 流水即"回流缺失"差异，补回滚（幂等：首次回滚成功后 Lua 返回无需补偿）。
+     * 活跃订单走一致翻牌。关单三步（条件关单/DB 回补/Redis 回滚）非原子，关单与回滚间的窗口
+     * 由本裁决 + rollback 幂等收敛——对账是关单链路的最终兜底层。
+     */
+    private int settleAccordingToOrderState(VoucherReconcileLog deductRow, Long voucherId, Long userId,
+                                            Long traceId, long flowTs) {
+        VoucherOrder order = orderMapper.selectById(deductRow.getOrderId());
+        if (order != null && (order.getStatus() == 2 || order.getStatus() == 3)) {
+            if (withinGrace(flowTs)) {
+                return 0;
+            }
+            log.error("对账差异[告警]: 订单已终态但 Redis 流水未恢复, 补偿回滚, orderId={}, status={}, traceId={}",
+                    order.getId(), order.getStatus(), traceId);
+            voucherOrderService.rollbackSeckillQualification(voucherId, userId, order.getId(), traceId,
+                    "RECONCILE_RESTORE_MISS", "order terminal but redis flow not restored");
+            return 1;
+        }
+        return settleConsistentTrace(deductRow);
     }
 
     /**

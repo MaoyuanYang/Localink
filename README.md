@@ -83,6 +83,6 @@ curl http://localhost:8086/ping   # -> pong
 - **M3 秒杀核心链路（五个主题）**：纯 DB 与超卖实录（基线 QPS 88.8/s）→ 分布式锁与一人一单 → Redis+Lua+Kafka 异步秒杀（QPS 74.9 → 168、峰值吸收 847/s、Avg -81%）→ 一致性闭环（幂等/消费可靠性/对账日志 traceId 三层串联）→ 流量防线（令牌桶/滑动窗口限流、@RateLimit 双维度、前置令牌）
 - **M4 数据层扩展**：自研雪花（时钟回拨分档）+ Redis 轮转机器位 → ShardingSphere 5.5.1 双库分片（库 user_id%/表 voucher_id%）+ 订单路由表
 
-当前测试基线 **217/217**（分模块 cache 48 / lock 9 / idempotent 6 / ratelimit 16 / mq 4 / id 9 / server 125）。M5-A 对账体系已落地（定时比对+差异补偿+失败表收敛，221/221）。下一步：M5-B 延迟队列与订单超时关单。
+当前测试基线 **217/217**（分模块 cache 48 / lock 9 / idempotent 6 / ratelimit 16 / mq 4 / id 9 / server 125）。M5-A 对账体系、M5-B 延迟队列与订单超时关单（delay-starter 首批代码+关单三步收敛设计+对账联动，226/226）已落地。下一步：M5-C 通知与运营统计。
 
 完整进度见 [docs/roadmap.md](docs/roadmap.md)。

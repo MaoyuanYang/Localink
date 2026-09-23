@@ -98,3 +98,8 @@ localink:
     interval-ms: 300000
     grace-minutes: 2
     failure-age-alarm-hours: 24
+  delay:
+    key-prefix: "lk:"
+    shards: 2
+  order:
+    close-delay: 15m
