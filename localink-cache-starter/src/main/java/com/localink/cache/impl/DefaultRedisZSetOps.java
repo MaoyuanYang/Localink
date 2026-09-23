@@ -91,6 +91,18 @@ public class DefaultRedisZSetOps implements RedisZSetOps {
         return convert(redisTemplate.opsForZSet().reverseRangeByScore(key.getKey(), min, max, offset, count), type);
     }
 
+    @Override
+    @SuppressWarnings("unchecked")
+    public <T> ZSetEntry<T> popMin(KeyBuild key, Class<T> type) {
+        org.springframework.data.redis.core.ZSetOperations.TypedTuple<String> tuple =
+                redisTemplate.opsForZSet().popMin(key.getKey());
+        if (tuple == null || tuple.getValue() == null) {
+            return null;
+        }
+        return new ZSetEntry<>(RedisJsonCodec.deserialize(tuple.getValue(), type),
+                tuple.getScore() == null ? 0d : tuple.getScore());
+    }
+
     private String[] serializeAll(Object... values) {
         String[] result = new String[values.length];
         for (int i = 0; i < values.length; i++) {

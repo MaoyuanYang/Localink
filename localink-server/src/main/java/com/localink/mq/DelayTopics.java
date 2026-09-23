@@ -13,4 +13,9 @@ public final class DelayTopics {
      * 订单超时关单：payload=orderId，shardKey=orderId，到期触发条件关单与库存回流（M5-B）。
      */
     public static final String ORDER_CLOSE = "order-close";
+
+    /**
+     * 开抢预通知：payload=voucherId，shardKey=voucherId，beginTime−lead 到期圈名单群发（M5-C）。
+     */
+    public static final String SECKILL_NOTICE = "seckill-notice";
 }
