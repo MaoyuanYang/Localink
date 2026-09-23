@@ -105,7 +105,37 @@ public enum KeyManage implements KeyTemplate {
      * lk:delay:{base}:{shard}——RDelayedQueue 绑定目标 RBlockingQueue，每分片一个消费线程。
      * 登记为文档对齐与 redis-cli 观测入口（同 RATELIMIT_STATE 先例）。
      */
-    DELAY_QUEUE("delay:%s:%s", null, "延迟队列（delay-starter 生成 lk:delay:{base}:{shard}，此处为文档对齐）");
+    DELAY_QUEUE("delay:%s:%s", null, "延迟队列（delay-starter 生成 lk:delay:{base}:{shard}，此处为文档对齐）"),
+
+    /**
+     * 用户 ID → 通知收件箱（ZSet：member=通知 JSON{type,voucherId,beginTime}，score=毫秒）。
+     * M5-C 预通知群发的落点；按 score 倒序即最新在前。教学口径的"触达"=收件箱+查询接口，
+     * 渠道推送（钉钉/邮件）属 M7-B。TTL 30 天自清。
+     */
+    USER_NOTICE("user:notice:%s", Duration.ofDays(30), "用户通知收件箱（ZSet，member=通知JSON score=毫秒，M5-C）"),
+
+    /**
+     * 券 ID → 订阅排队（ZSet：member=userId，score=订阅时刻毫秒）——最早订阅者 score 最小，
+     * popMin 原子弹出即"队首出队"。M5-C；状态另存 SUBSCRIBE_STATUS。
+     */
+    SUBSCRIBE_QUEUE("seckill:subscribe:%s", null, "秒杀券订阅排队（ZSet member=userId score=订阅毫秒，M5-C）"),
+
+    /**
+     * 券 ID → 订阅状态（Hash：field=userId，value=SUBSCRIBED/GRANTED）。
+     * GRANTED=已被自动发券（回流补位成功）。
+     */
+    SUBSCRIBE_STATUS("seckill:subscribe:status:%s", null, "订阅状态（Hash field=userId→SUBSCRIBED/GRANTED，M5-C）"),
+
+    /**
+     * 店铺 ID + 日期 → 每日 Top 买家（ZSet：member=userId，score=当日成交单数）。
+     * 建单事务内 ZINCRBY 维护；TTL 2 天按日自清；预通知附加圈选来源。
+     */
+    SHOP_TOP_BUYERS("shop:top:%s:%s", Duration.ofDays(2), "店铺每日Top买家（ZSet member=userId score=当日单数，M5-C）"),
+
+    /**
+     * 券 ID → 预通知已发标记（String，SETNX 防重）。延迟任务重投不重发群发的幂等闸门，TTL 1 天。
+     */
+    NOTICE_SENT("seckill:notice:sent:%s", Duration.ofDays(1), "预通知已发标记（SETNX 防重，M5-C）");
 
     private final String template;
     private final Duration ttl;

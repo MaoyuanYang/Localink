@@ -47,6 +47,9 @@ mybatis-plus:
 
 localink:
   seckill:
+    notice:
+      lead-minutes: 2
+      expired-tolerance-minutes: 5
     consume:
       max-stale-ms: 10000
       max-attempts: 4

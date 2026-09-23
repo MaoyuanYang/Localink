@@ -67,6 +67,8 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
     private final com.localink.framework.seckill.SeckillTokenService seckillTokenService;
     private final com.localink.id.SnowflakeIdGenerator snowflakeIdGenerator;
     private final com.localink.delay.DelayQueuePublisher delayQueuePublisher;
+    private final com.localink.service.SubscribeService subscribeService;
+    private final com.localink.service.TopBuyerService topBuyerService;
     private final RedisScript<String> seckillDeductScript;
     private final RedisScript<String> seckillRollbackScript;
     private final MessageProducer messageProducer;
@@ -131,6 +133,11 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
         } catch (DuplicateKeyException e) {
             log.info("唯一索引拦截重复建单（守卫与插入间隙的竞态）, orderId={}", message.orderId());
             return;
+        }
+        // M5-C：店铺每日 Top 买家记账（按日 ZSet，ZINCRBY 幂等口径=单数自然累计）
+        Voucher voucher = voucherMapper.selectById(message.voucherId());
+        if (voucher != null && voucher.getShopId() != null) {
+            topBuyerService.recordOrder(voucher.getShopId(), message.userId());
         }
         // M5-B：超时关单延迟任务（orderId 分片路由）。事务内投递——若事务回滚则任务空转，
         // 消费端条件关单（status=1 才关）天然幂等，空转无副作用；投递失败仅日志不阻断建单
@@ -234,6 +241,7 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
         Long traceId = resolveTraceId(orderId);
         rollbackSeckillQualification(order.getVoucherId(), order.getUserId(), orderId, traceId,
                 "ORDER_CLOSE", "order expired and closed by delay task");
+        subscribeService.tryGrantEarliest(order.getVoucherId());
         return true;
     }
 

@@ -31,6 +31,10 @@ public class SeckillVoucherServiceImpl implements SeckillVoucherService {
     private final VoucherMapper voucherMapper;
     private final SeckillVoucherMapper seckillVoucherMapper;
     private final SeckillStockCache seckillStockCache;
+    private final com.localink.delay.DelayQueuePublisher delayQueuePublisher;
+
+    @org.springframework.beans.factory.annotation.Value("${localink.seckill.notice.lead-minutes:2}")
+    private long noticeLeadMinutes;
 
     @Override
     @Transactional
@@ -56,7 +60,25 @@ public class SeckillVoucherServiceImpl implements SeckillVoucherService {
         seckill.setEndTime(dto.getEndTime());
         seckillVoucherMapper.insert(seckill);
         seckillStockCache.warm(voucher.getId(), dto.getStock(), dto.getEndTime());
+        offerPreNotice(voucher.getId(), dto.getBeginTime());
         return String.valueOf(voucher.getId());
+    }
+
+    /**
+     * M5-C 预通知投递：活动级一条延迟任务（beginTime−lead 到期）。已开场或不足 lead 不投——
+     * 迟到窗口的通知由消费端"开场容差"跳过，投递端只管挂闹钟。
+     */
+    private void offerPreNotice(Long voucherId, java.time.LocalDateTime beginTime) {
+        if (beginTime == null) {
+            return;
+        }
+        long delayMs = java.time.Duration.between(java.time.LocalDateTime.now(),
+                beginTime.minusMinutes(noticeLeadMinutes)).toMillis();
+        if (delayMs < 0) {
+            return;
+        }
+        delayQueuePublisher.offerSharded(com.localink.mq.DelayTopics.SECKILL_NOTICE,
+                voucherId, String.valueOf(voucherId), java.time.Duration.ofMillis(delayMs));
     }
 
     @Override
