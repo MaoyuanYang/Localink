@@ -4,15 +4,21 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.localink.api.dto.PostCreateDTO;
+import com.localink.api.dto.UserDTO;
 import com.localink.api.vo.PageVO;
 import com.localink.api.vo.PostVO;
+import com.localink.cache.KeyBuilder;
+import com.localink.cache.RedisCache;
 import com.localink.common.code.BaseCode;
 import com.localink.common.exception.LocalinkException;
+import com.localink.constant.KeyManage;
 import com.localink.entity.Post;
 import com.localink.entity.PostComment;
+import com.localink.entity.PostLike;
 import com.localink.entity.User;
 import com.localink.framework.holder.UserHolder;
 import com.localink.mapper.PostCommentMapper;
+import com.localink.mapper.PostLikeMapper;
 import com.localink.mapper.PostMapper;
 import com.localink.mapper.UserMapper;
 import com.localink.service.PostService;
@@ -23,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -40,7 +47,10 @@ public class PostServiceImpl implements PostService {
 
     private final PostMapper postMapper;
     private final PostCommentMapper commentMapper;
+    private final PostLikeMapper postLikeMapper;
     private final UserMapper userMapper;
+    private final RedisCache redisCache;
+    private final KeyBuilder keyBuilder;
 
     @Override
     public String create(PostCreateDTO dto) {
@@ -64,7 +74,11 @@ public class PostServiceImpl implements PostService {
         Post post = requireOwnPost(postId);
         commentMapper.delete(new LambdaQueryWrapper<PostComment>()
                 .eq(PostComment::getPostId, postId));
+        postLikeMapper.delete(new LambdaQueryWrapper<PostLike>()
+                .eq(PostLike::getPostId, postId));
         postMapper.deleteById(post.getId());
+        // ZREM 与删行同事务段执行：残局（帖在榜无 / 帖无榜有）由 top 按现存帖回填 + 事实源重算兜底
+        redisCache.zsets().remove(keyBuilder.build(KeyManage.POST_LIKE_TOP), String.valueOf(postId));
     }
 
     @Override
@@ -77,7 +91,14 @@ public class PostServiceImpl implements PostService {
                 .eq(Post::getId, postId)
                 .setSql("viewed = viewed + 1"));
         post.setViewed(post.getViewed() + 1);
-        return toVo(List.of(post)).get(0);
+        PostVO vo = toVo(List.of(post)).get(0);
+        UserDTO me = UserHolder.get();
+        if (me != null) {
+            vo.setMeLiked(postLikeMapper.selectCount(new LambdaQueryWrapper<PostLike>()
+                    .eq(PostLike::getPostId, postId)
+                    .eq(PostLike::getUserId, me.getId())) > 0);
+        }
+        return vo;
     }
 
     @Override
@@ -88,6 +109,17 @@ public class PostServiceImpl implements PostService {
                         .eq(shopId != null, Post::getShopId, shopId)
                         .orderByDesc(Post::getCreateTime));
         return PageVO.of(result.getTotal(), toVo(result.getRecords()));
+    }
+
+    @Override
+    public List<PostVO> listOrdered(List<Long> orderedIds) {
+        if (orderedIds.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, Post> byId = postMapper.selectBatchIds(orderedIds).stream()
+                .filter(post -> post.getAuditStatus() != null && post.getAuditStatus() == AUDIT_PASSED)
+                .collect(Collectors.toMap(Post::getId, Function.identity()));
+        return toVo(orderedIds.stream().map(byId::get).filter(Objects::nonNull).toList());
     }
 
     private Post requireOwnPost(Long postId) {
