@@ -135,7 +135,20 @@ public enum KeyManage implements KeyTemplate {
     /**
      * 券 ID → 预通知已发标记（String，SETNX 防重）。延迟任务重投不重发群发的幂等闸门，TTL 1 天。
      */
-    NOTICE_SENT("seckill:notice:sent:%s", Duration.ofDays(1), "预通知已发标记（SETNX 防重，M5-C）");
+    NOTICE_SENT("seckill:notice:sent:%s", Duration.ofDays(1), "预通知已发标记（SETNX 防重，M5-C）"),
+
+    /**
+     * 帖子点赞榜（ZSet：member=postId，score=点赞数）。M6-B：点赞/取消的事务提交后 ZINCRBY ±1
+     * 增量维护，score≤0 即 ZREM 防僵尸 member；删帖级联 ZREM。事实源 lk_post_like，漂移可重算。
+     */
+    POST_LIKE_TOP("post:like:top", null, "帖子点赞榜（ZSet member=postId score=点赞数，M6-B；事实源lk_post_like可重算）"),
+
+    /**
+     * 用户 ID → 我关注的用户集合（Set：member=被关注 userId）。M6-B：关注/取关的事务提交后
+     * SADD/SREM；共同关注 SINTER 数据源、M6-C 关注流数据源。粉丝侧不建 Set（大 V 巨型集合
+     * 走 lk_follow idx_follow_user_id 反查 + User.fans 计数）。
+     */
+    USER_FOLLOWEE("user:follow:%s", null, "我关注的用户集合（Set member=被关注userId，M6-B；粉丝侧不建Set走DB反查）");
 
     private final String template;
     private final Duration ttl;
