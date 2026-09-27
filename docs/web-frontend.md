@@ -72,6 +72,7 @@ localink-web/
 | 统一返回 | 响应拦截器解包 `Result`：`code=0` 取 `data`，非 0 按错误码 toast 并 reject |
 | 会话失效 | 捕获 40002 未登录错误码 → 清空 authStore → 跳转登录页（C 端）或 /admin/login |
 | 分页 | 统一 `page`/`size` 请求参数与 `total`/`records` 响应结构，与后端分页对象对齐 |
+| 滚动分页 | 时间线场景（Feed 关注流，M6-C 立）用 `lastScore`/`size` 请求与 `records`/`nextCursor` 响应（ScrollVO），`nextCursor=null` 到底即停；null 的 lastScore 语义是从头开始，不是空页 |
 | 时间 | 后端统一 `yyyy-MM-dd HH:mm:ss` 字符串，前端倒计时等场景自行 parse |
 | 错误码 | 前端不硬编码错误码文案，toast 直接展示后端 `message` |
 
