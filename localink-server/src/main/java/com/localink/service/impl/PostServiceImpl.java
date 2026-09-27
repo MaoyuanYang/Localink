@@ -16,6 +16,7 @@ import com.localink.entity.Post;
 import com.localink.entity.PostComment;
 import com.localink.entity.PostLike;
 import com.localink.entity.User;
+import com.localink.event.PostCreatedEvent;
 import com.localink.framework.holder.UserHolder;
 import com.localink.mapper.PostCommentMapper;
 import com.localink.mapper.PostLikeMapper;
@@ -23,6 +24,7 @@ import com.localink.mapper.PostMapper;
 import com.localink.mapper.UserMapper;
 import com.localink.service.PostService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -51,6 +53,7 @@ public class PostServiceImpl implements PostService {
     private final UserMapper userMapper;
     private final RedisCache redisCache;
     private final KeyBuilder keyBuilder;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     public String create(PostCreateDTO dto) {
@@ -65,6 +68,8 @@ public class PostServiceImpl implements PostService {
         post.setViewed(0);
         post.setAuditStatus(AUDIT_PASSED);
         postMapper.insert(post);
+        // 发帖即事实：Feed 收件箱等派生投影订阅该事件（M6-C，进程内事件 → 演进为 MQ）
+        eventPublisher.publishEvent(new PostCreatedEvent(post.getId(), post.getUserId()));
         return String.valueOf(post.getId());
     }
 

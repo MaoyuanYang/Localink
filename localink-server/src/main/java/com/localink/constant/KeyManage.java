@@ -148,7 +148,15 @@ public enum KeyManage implements KeyTemplate {
      * SADD/SREM；共同关注 SINTER 数据源、M6-C 关注流数据源。粉丝侧不建 Set（大 V 巨型集合
      * 走 lk_follow idx_follow_user_id 反查 + User.fans 计数）。
      */
-    USER_FOLLOWEE("user:follow:%s", null, "我关注的用户集合（Set member=被关注userId，M6-B；粉丝侧不建Set走DB反查）");
+    USER_FOLLOWEE("user:follow:%s", null, "我关注的用户集合（Set member=被关注userId，M6-B；粉丝侧不建Set走DB反查）"),
+
+    /**
+     * 用户 ID → 关注流收件箱（ZSet：member=postId，score=毫秒<<12|postId低12位，位账 41+12=53
+     * 保证 score 唯一——游标滚动分页不重不漏）。M6-C 推模式：发帖事件触发推送（大 V 不推），
+     * 超上限 popMin 截断（localink.feed.inbox-max-size）；读端与我关注的大 V 帖（DB 拉取）归并。
+     * 取关/删帖不清收件箱（读端过滤兜底），漂移由"关注关系+帖子"重算恢复。
+     */
+    USER_FEED("user:feed:%s", null, "关注流收件箱（ZSet member=postId score=毫秒<<12|postId低12位，M6-C 推模式+推挽结合）");
 
     private final String template;
     private final Duration ttl;

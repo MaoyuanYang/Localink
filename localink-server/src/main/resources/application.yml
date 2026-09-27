@@ -111,6 +111,9 @@ localink:
     shards: 2
   order:
     close-delay: 15m
+  feed:
+    big-v-fans-threshold: 1000
+    inbox-max-size: 1024
   storage:
     type: local
     dir: ./upload
