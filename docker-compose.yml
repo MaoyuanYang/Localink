@@ -84,6 +84,13 @@ services:
     container_name: localink-es
     restart: unless-stopped
     profiles: ["es"]
+    # ik 分词器：容器创建时条件安装（插件落容器层，restart 不重复装）；版本必须与 ES 完全一致。
+    # 安装失败容器退出，靠 restart: unless-stopped 自动重试（网络自愈）；源为 infini 国内镜像。
+    # 容器重建（down/up）后插件随容器层消失，会再次触发安装——数据在 localink-es-data 卷不受影响。
+    command: >-
+      bash -c "if [ ! -d plugins/analysis-ik ];
+      then elasticsearch-plugin install --batch https://get.infini.cloud/elasticsearch/analysis-ik/8.15.5;
+      fi; exec /usr/local/bin/docker-entrypoint.sh elasticsearch"
     environment:
       discovery.type: single-node
       xpack.security.enabled: "false"
