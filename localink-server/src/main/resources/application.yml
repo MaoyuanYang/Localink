@@ -69,6 +69,9 @@ localink:
       cache-invalidation:
         partitions: 1
         replicas: 1
+      post-search-sync:
+        partitions: 3
+        replicas: 1
   cache:
     bloom:
       filters:
@@ -114,6 +117,9 @@ localink:
   feed:
     big-v-fans-threshold: 1000
     inbox-max-size: 1024
+  search:
+    uris:
+      - http://localhost:9200
   storage:
     type: local
     dir: ./upload

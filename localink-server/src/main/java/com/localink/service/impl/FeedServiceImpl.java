@@ -26,7 +26,8 @@ import com.localink.service.PostService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.context.event.EventListener;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -70,10 +71,11 @@ public class FeedServiceImpl implements FeedService {
     // ===== 推模式 =====
 
     /**
-     * 发帖事件监听：同步推送（演示量级可接受；演进为 Kafka 异步+pipeline 批量）。
+     * 发帖事件监听：AFTER_COMMIT——create 自 M6-D 起有事务边界，提交后才推送（回滚不留幽灵
+     * 收件箱条目）。同步推送（演示量级可接受；演进为 Kafka 异步+pipeline 批量）。
      * 推送失败只告警不抛——收件箱是可重建的派生视图，不能阻塞发帖事实。
      */
-    @EventListener
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onPostCreated(PostCreatedEvent event) {
         try {
             pushToFans(event.postId(), event.authorId());
