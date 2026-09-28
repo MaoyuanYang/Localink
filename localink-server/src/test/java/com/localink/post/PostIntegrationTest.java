@@ -137,7 +137,8 @@ class PostIntegrationTest {
         mockMvc.perform(get("/api/post/{id}", postId).header("Authorization", token))
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.nickName").value("探店达人"))
-                .andExpect(jsonPath("$.data.viewed").value(1))
+                // M6-E 起 viewed 语义收敛为 UV 快照（HotRankJob 定时 PFCOUNT 回写），detail 不再朴素+1
+                .andExpect(jsonPath("$.data.viewed").value(0))
                 .andExpect(jsonPath("$.data.images.length()").value(2));
 
         Post post = postMapper.selectById(postId);

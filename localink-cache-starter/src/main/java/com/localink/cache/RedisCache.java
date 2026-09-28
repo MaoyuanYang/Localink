@@ -57,6 +57,11 @@ public interface RedisCache {
     RedisZSetOps zsets();
 
     /**
+     * HyperLogLog 结构操作（M6-E 扩组）。
+     */
+    RedisHyperLogLogOps hyperloglogs();
+
+    /**
      * Lua 脚本执行（多 key 原子操作）。
      */
     RedisScriptOps scripts();

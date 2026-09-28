@@ -275,6 +275,23 @@ class RedisCacheIntegrationTest {
     }
 
     @Test
+    void hyperloglogDedupCountAndUnion() {
+        redisCache.delete(keyBuilder.build(TestKeys.HLL_A));
+        redisCache.delete(keyBuilder.build(TestKeys.HLL_B));
+        redisCache.delete(keyBuilder.build(TestKeys.HLL_UNION));
+        redisCache.hyperloglogs().add(keyBuilder.build(TestKeys.HLL_A), "u1", "u2", "u3");
+        assertEquals(3L, redisCache.hyperloglogs().count(keyBuilder.build(TestKeys.HLL_A)));
+        redisCache.hyperloglogs().add(keyBuilder.build(TestKeys.HLL_A), "u3");
+        assertEquals(3L, redisCache.hyperloglogs().count(keyBuilder.build(TestKeys.HLL_A)), "重复成员基数不变（去重）");
+        redisCache.hyperloglogs().add(keyBuilder.build(TestKeys.HLL_B), "u3", "u4");
+        assertEquals(4L, redisCache.hyperloglogs().count(
+                keyBuilder.build(TestKeys.HLL_A), keyBuilder.build(TestKeys.HLL_B)), "多 key 并集基数");
+        redisCache.hyperloglogs().union(keyBuilder.build(TestKeys.HLL_UNION),
+                keyBuilder.build(TestKeys.HLL_A), keyBuilder.build(TestKeys.HLL_B));
+        assertEquals(4L, redisCache.hyperloglogs().count(keyBuilder.build(TestKeys.HLL_UNION)));
+    }
+
+    @Test
     void commonHasKeyDeleteExpire() {
         assertFalse(redisCache.hasKey(stringKey));
         redisCache.strings().set(stringKey, "v");
