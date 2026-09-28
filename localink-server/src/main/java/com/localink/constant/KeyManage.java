@@ -156,7 +156,21 @@ public enum KeyManage implements KeyTemplate {
      * 超上限 popMin 截断（localink.feed.inbox-max-size）；读端与我关注的大 V 帖（DB 拉取）归并。
      * 取关/删帖不清收件箱（读端过滤兜底），漂移由"关注关系+帖子"重算恢复。
      */
-    USER_FEED("user:feed:%s", null, "关注流收件箱（ZSet member=postId score=毫秒<<12|postId低12位，M6-C 推模式+推挽结合）");
+    USER_FEED("user:feed:%s", null, "关注流收件箱（ZSet member=postId score=毫秒<<12|postId低12位，M6-C 推模式+推挽结合）"),
+
+    /**
+     * 帖子浏览 UV（HyperLogLog：member=userId，登录用户口径，游客不计）。M6-E：detail() PFADD
+     * 记录，HotRankJob 定时 PFCOUNT 回写 lk_post.viewed（该列语义=UV 快照）并参与热榜浏览权重。
+     * 丢失=UV 归零重累，接受（database.md §7）；TTL 30 天（衰减窗口外 UV 无用）。
+     */
+    POST_UV("post:uv:%s", Duration.ofDays(30), "帖子浏览UV（HyperLogLog member=userId，M6-E；PFCOUNT 回写 viewed+热榜权重）"),
+
+    /**
+     * 帖子热榜快照（ZSet：member=postId，score=(liked×w1+comments×w2+uv×w3)×e^(-λΔt)，λ=ln2/半衰期）。
+     * M6-E：HotRankJob 定时全量重算（候选集=近期新帖∪现役榜帖，事实源=liked/comments/UV 三处直查，
+     * 零行为挂点）；跌出候选集即 ZREM。与 POST_LIKE_TOP（单一行为计数榜）服务不同页面，不合并。
+     */
+    POST_HOT_TOP("post:hot:top", null, "帖子热榜快照（ZSet member=postId score=加权分×e^(-λΔt)，M6-E 定时全量重算）");
 
     private final String template;
     private final Duration ttl;

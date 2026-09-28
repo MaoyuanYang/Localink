@@ -87,6 +87,9 @@ public class PostServiceImpl implements PostService {
         postMapper.deleteById(post.getId());
         // ZREM 与删行同事务段执行：残局（帖在榜无 / 帖无榜有）由 top 按现存帖回填 + 事实源重算兜底
         redisCache.zsets().remove(keyBuilder.build(KeyManage.POST_LIKE_TOP), String.valueOf(postId));
+        // M6-E：热榜快照与浏览 UV 一并清理（对齐级联矩阵；UV 事实随帖消亡，保留无意义）
+        redisCache.zsets().remove(keyBuilder.build(KeyManage.POST_HOT_TOP), String.valueOf(postId));
+        redisCache.delete(keyBuilder.build(KeyManage.POST_UV, postId));
         eventPublisher.publishEvent(new PostDeletedEvent(postId));
     }
 
@@ -96,12 +99,14 @@ public class PostServiceImpl implements PostService {
         if (post == null || post.getAuditStatus() == null || post.getAuditStatus() != AUDIT_PASSED) {
             throw new LocalinkException(BaseCode.NOT_FOUND, "帖子不存在或未过审");
         }
-        postMapper.update(null, new LambdaUpdateWrapper<Post>()
-                .eq(Post::getId, postId)
-                .setSql("viewed = viewed + 1"));
-        post.setViewed(post.getViewed() + 1);
-        PostVO vo = toVo(List.of(post)).get(0);
+        // M6-E：朴素 viewed+1 退役——viewed 语义收敛为 UV 快照（HotRankJob 定时 PFCOUNT 回写）；
+        // 游客（未登录）不计 UV：member 无稳定标识，IP 口径代理下不准且有伪造面
         UserDTO me = UserHolder.get();
+        if (me != null) {
+            redisCache.hyperloglogs().add(
+                    keyBuilder.build(KeyManage.POST_UV, postId), String.valueOf(me.getId()));
+        }
+        PostVO vo = toVo(List.of(post)).get(0);
         if (me != null) {
             vo.setMeLiked(postLikeMapper.selectCount(new LambdaQueryWrapper<PostLike>()
                     .eq(PostLike::getPostId, postId)

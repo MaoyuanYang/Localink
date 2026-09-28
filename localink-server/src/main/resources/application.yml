@@ -120,6 +120,15 @@ localink:
   search:
     uris:
       - http://localhost:9200
+  hot:
+    enabled: true
+    interval-ms: 300000
+    recency-days: 7
+    half-life-hours: 72
+    weights:
+      like: 5
+      comment: 3
+      view: 1
   storage:
     type: local
     dir: ./upload

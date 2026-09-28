@@ -7,6 +7,7 @@ import com.localink.api.vo.PageVO;
 import com.localink.api.vo.PostVO;
 import com.localink.common.result.Result;
 import com.localink.service.CommentService;
+import com.localink.service.HotRankService;
 import com.localink.service.LikeService;
 import com.localink.service.PostService;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +35,7 @@ public class PostController {
     private final PostService postService;
     private final CommentService commentService;
     private final LikeService likeService;
+    private final HotRankService hotRankService;
 
     @PostMapping
     public Result<String> create(@Validated @RequestBody PostCreateDTO dto) {
@@ -89,6 +91,11 @@ public class PostController {
     @GetMapping("/like/top")
     public Result<List<PostVO>> likeTop(@RequestParam(defaultValue = "10") int limit) {
         return Result.ok(likeService.top(limit));
+    }
+
+    @GetMapping("/hot")
+    public Result<List<PostVO>> hot(@RequestParam(defaultValue = "10") int limit) {
+        return Result.ok(hotRankService.top(limit));
     }
 
     @PostMapping("/comment/{commentId}/like")
