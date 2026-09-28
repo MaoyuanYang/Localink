@@ -74,8 +74,8 @@ localink-web/
 | 分页 | 统一 `page`/`size` 请求参数与 `total`/`records` 响应结构，与后端分页对象对齐 |
 | 滚动分页 | 时间线场景（Feed 关注流，M6-C 立）用 `lastScore`/`size` 请求与 `records`/`nextCursor` 响应（ScrollVO），`nextCursor=null` 到底即停；null 的 lastScore 语义是从头开始，不是空页 |
 | 搜索 | `GET /api/search/post?keyword=&shopId=&sort=relevance\|time&searchAfter=&size=`（M6-D 立）
-| 签到 | `POST /api/user/sign`（幂等）与 `GET /api/user/sign`（M6-F 立），响应 `SignVO{signedToday, continuousDays, monthDays}` |
-| 附近商户 | `GET /api/shop/nearby?longitude=&latitude=&radius=5000&count=10`（M6-F 立），按距离升序，`distance` 单位米 |；响应 `SearchVO{records, nextSearchAfter, shopFacets}`，`nextSearchAfter` 原样回传续翻、null 到底；`shopFacets` 为商户分面侧栏（全集，不受 shopId 筛选影响）；高亮字段含 `<em>`，文本已后端转义，任意渲染安全 |
+| 签到 | `POST /api/user/sign`（幂等）与 `GET /api/user/sign`（M6-F 立），响应 `SignVO{signedToday, continuousDays, monthDays}` |；响应 `SearchVO{records, nextSearchAfter, shopFacets}`，`nextSearchAfter` 原样回传续翻、null 到底；`shopFacets` 为商户分面侧栏（全集，不受 shopId 筛选影响）；高亮字段含 `<em>`，文本已后端转义，任意渲染安全 |
+| 附近商户 | `GET /api/shop/nearby?longitude=&latitude=&radius=5000&count=10`（M6-F 立），按距离升序，`distance` 单位米 |
 | 时间 | 后端统一 `yyyy-MM-dd HH:mm:ss` 字符串，前端倒计时等场景自行 parse |
 | 错误码 | 前端不硬编码错误码文案，toast 直接展示后端 `message` |
 
