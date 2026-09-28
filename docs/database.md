@@ -330,7 +330,7 @@ erDiagram
 | 秒杀库存/一人一单/流水 | Hash（hash tag 同槽位） | M3.6/M3.12 | DEL 回源 DB 重建（F-TRD-05） |
 | 订阅到券提醒 | ZSet 排队 + Hash 状态 | M5.6 | 由 DB 券配置 + 用户订阅行为重放（M5.6 定义） |
 | 点赞榜 TopN | ZSet | M6.4 | 由 lk_post_like 重算 |
-| Feed 收件箱 | ZSet（推模式） | M6.6 | 拉模式兜底（M6.8 推挽结合） |
+| Feed 收件箱 | ZSet（member=postId，score=毫秒<<12\|postId低12位） | M6-C | 关注关系+帖子重算（截断丢失=老帖淘汰，接受）；大 V 不推、读端拉取归并 |
 | 热榜 | ZSet 快照 | M6.14 | 定时任务重算 |
 | 签到 | BitMap（user:{id}:sign:{yyyyMM}） | M6.17 | 丢失=签到记录丢失，接受（演示场景） |
 | UV 统计 | HyperLogLog | M6.12 | 丢失=计数归零重累，接受 |

@@ -92,6 +92,21 @@ public class DefaultRedisZSetOps implements RedisZSetOps {
     }
 
     @Override
+    public <T> Set<ZSetEntry<T>> reverseRangeByScoreWithScore(KeyBuild key, double min, double max, long offset, long count, Class<T> type) {
+        Set<ZSetOperations.TypedTuple<String>> tuples = redisTemplate.opsForZSet()
+                .reverseRangeByScoreWithScores(key.getKey(), min, max, offset, count);
+        if (tuples == null) {
+            return Set.of();
+        }
+        Set<ZSetEntry<T>> result = new LinkedHashSet<>(tuples.size());
+        tuples.forEach(tuple -> {
+            Double score = tuple.getScore();
+            result.add(new ZSetEntry<>(RedisJsonCodec.deserialize(tuple.getValue(), type), score == null ? 0d : score));
+        });
+        return result;
+    }
+
+    @Override
     @SuppressWarnings("unchecked")
     public <T> ZSetEntry<T> popMin(KeyBuild key, Class<T> type) {
         org.springframework.data.redis.core.ZSetOperations.TypedTuple<String> tuple =

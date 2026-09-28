@@ -71,6 +71,12 @@ public interface RedisZSetOps {
     <T> Set<T> reverseRangeByScore(KeyBuild key, double min, double max, long offset, long count, Class<T> type);
 
     /**
+     * 按 score 范围读取并携带 score（score 从大到小），offset/count 用于游标滚动分页——
+     * 游标翻页需要下一页的 lastScore，只取 member 不够（M6-C Feed 收件箱）。
+     */
+    <T> Set<ZSetEntry<T>> reverseRangeByScoreWithScore(KeyBuild key, double min, double max, long offset, long count, Class<T> type);
+
+    /**
      * 弹出 score 最小的一个元素（ZPOPMIN 原子：弹出与移除无并发缝隙）；空集返回 null。
      */
     <T> ZSetEntry<T> popMin(KeyBuild key, Class<T> type);

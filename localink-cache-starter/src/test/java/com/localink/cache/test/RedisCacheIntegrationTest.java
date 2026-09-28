@@ -258,6 +258,16 @@ class RedisCacheIntegrationTest {
     }
 
     @Test
+    void zsetReverseRangeByScoreWithScoreCarriesScoreForCursor() {
+        seedZset();
+        Set<ZSetEntry<String>> page = redisCache.zsets().reverseRangeByScoreWithScore(zsetKey, 1.5, 10, 0, 1, String.class);
+        assertEquals(1, page.size());
+        ZSetEntry<String> entry = page.iterator().next();
+        assertEquals("b", entry.value());
+        assertEquals(3.0, entry.score());
+    }
+
+    @Test
     void zsetRemove() {
         seedZset();
         assertEquals(1L, redisCache.zsets().remove(zsetKey, "a"));
