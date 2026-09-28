@@ -17,6 +17,7 @@ import com.localink.entity.PostComment;
 import com.localink.entity.PostLike;
 import com.localink.entity.User;
 import com.localink.event.PostCreatedEvent;
+import com.localink.event.PostDeletedEvent;
 import com.localink.framework.holder.UserHolder;
 import com.localink.mapper.PostCommentMapper;
 import com.localink.mapper.PostLikeMapper;
@@ -56,6 +57,7 @@ public class PostServiceImpl implements PostService {
     private final ApplicationEventPublisher eventPublisher;
 
     @Override
+    @Transactional
     public String create(PostCreateDTO dto) {
         Post post = new Post();
         post.setUserId(UserHolder.get().getId());
@@ -68,7 +70,8 @@ public class PostServiceImpl implements PostService {
         post.setViewed(0);
         post.setAuditStatus(AUDIT_PASSED);
         postMapper.insert(post);
-        // 发帖即事实：Feed 收件箱等派生投影订阅该事件（M6-C，进程内事件 → 演进为 MQ）
+        // 发帖即事实：Feed 收件箱（进程内投影）与 ES 同步（跨进程 MQ 投影，M6-D）订阅该事件；
+        // 订阅方一律 AFTER_COMMIT——事务内发布，提交后才消费，回滚不留幻影
         eventPublisher.publishEvent(new PostCreatedEvent(post.getId(), post.getUserId()));
         return String.valueOf(post.getId());
     }
@@ -84,6 +87,7 @@ public class PostServiceImpl implements PostService {
         postMapper.deleteById(post.getId());
         // ZREM 与删行同事务段执行：残局（帖在榜无 / 帖无榜有）由 top 按现存帖回填 + 事实源重算兜底
         redisCache.zsets().remove(keyBuilder.build(KeyManage.POST_LIKE_TOP), String.valueOf(postId));
+        eventPublisher.publishEvent(new PostDeletedEvent(postId));
     }
 
     @Override
