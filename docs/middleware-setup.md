@@ -57,6 +57,12 @@ docker exec localink-kafka /opt/kafka/bin/kafka-broker-api-versions.sh --bootstr
 docker exec localink-kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --topic lk-smoke-test --partitions 1 --replication-factor 1
 docker exec localink-kafka /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server localhost:9092 --topic lk-smoke-test
 docker exec localink-kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic lk-smoke-test --from-beginning
+
+# ES（--profile es 启动，M6-D 起）：返回版本号 8.15.5
+curl http://localhost:9200
+
+# ik 分词器验证（compose 的 command 已自动安装）：应切出多词组合而非单字
+curl -X POST "http://localhost:9200/_analyze" -H "Content-Type: application/json" -d "{\"analyzer\":\"ik_max_word\",\"text\":\"牛肉面真香\"}"
 ```
 
 ## 5. 故障排查
@@ -67,7 +73,9 @@ docker exec localink-kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-
 | `docker compose ps` 显示 unhealthy | `docker logs localink-<服务>` 看日志；Kafka 首次格式化存储较慢，等 30s |
 | 端口被占用 | `netstat -ano \| findstr :3306` 找到占用进程 |
 | Kafka 起不来且日志报 CLUSTER_ID 冲突 | `docker compose down -v` 清卷重来 |
+| ES 容器反复重启 | `docker logs localink-es` 看 ik 插件下载是否失败（网络），restart 策略会自动重试；插件装在容器层，容器重建（down/up）会重装 |
+| `_analyze` 报 unknown analyzer [ik_max_word] | ik 未装上：进容器 `bin/elasticsearch-plugin install https://get.infini.cloud/elasticsearch/analysis-ik/8.15.5` 后 `docker restart localink-es` |
 
 ## 6. 与本项目配置的对应关系
 
-`localink-server` 的 `application.yml` 将使用：`localhost:3306`（M1 单库，库名 `localink`）、`localhost:6379`、`localhost:9092`、M6 起加 `localhost:9200`。密码/地址变更时同步改 yml，不要提交到仓库的密钥一律放 `application-local.yml`。
+`localink-server` 的 `application.yml` 使用：`localhost:3306`（库名 `localink`，分片二库 `localink_1`）、`localhost:6379`、`localhost:9092`、`localhost:9200`（`localink.search.uris`，M6-D 起启用，免认证）。密码/地址变更时同步改 yml，不要提交到仓库的密钥一律放 `application-local.yml`。
