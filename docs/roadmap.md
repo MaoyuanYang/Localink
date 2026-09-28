@@ -41,7 +41,7 @@
 - [x] **M6-B 互动关系**：点赞（事实表 lk_post_like+冗余计数+幂等）+ 点赞榜 TopN（ZSet，afterCommit 增量可重算）+ 关注/取关（fans/followee 双侧计数+关注 Set）+ 共同关注（SINTER 交集）—— 大 V 不建粉丝 Set 走 DB 反查（M6-C 拉模式伏笔） —— 2026-09-26
 - [x] **M6-C Feed 流**：推模式（发帖事件推送粉丝收件箱，大 V 不推+popMin 截断）+ 关注流滚动分页（score 位账 毫秒<<12\|雪花序列位，exclusive 游标，ScrollVO 契约）+ 推挽结合（读端归并收件箱 ∪ 大 V DB 拉取，取关/审核读端过滤） —— 2026-09-27
 - [x] **M6-D 搜索**：search-starter（client 钉 8.15.5 与服务端严格对齐）+ 发帖/删帖 AFTER_COMMIT → Kafka（key=postId 同帖 FIFO，消息只带 id 消费端查库，upsert 幂等）→ 消费写 ES（ik 不对称分词+高亮 XSS 转义）+ 搜索接口（multi_match 算分/post_filter 分面保全集/聚合侧栏，search_after+tie-breaker 深分页）+ rebuildAll 全量重建兜底 —— 2026-09-28
-- [ ] **M6-E 热点统计**：HyperLogLog 浏览 UV 去重 + 热榜分数模型（点赞/评论/浏览加权 + 时间衰减）+ 定时快照与热榜接口
+- [x] **M6-E 热点统计**：HLL 浏览 UV（starter 扩组，登录用户口径，viewed 收敛为 UV 快照定时回写）+ 热榜分数模型（行为加权×e^(-λΔt) 半衰期 72h，全量重算零行为挂点）+ 候选集（近期∪现役）定时快照与热榜接口 —— 2026-09-28
 - [ ] **M6-F 风控与特色**：DFA 敏感词字典树（同步初筛）+ MQ 异步审核状态机（驳回同步删 ES 文档）+ BitMap 用户签到（连续签到统计）+ GEO 附近商户检索（按距离排序）
 
 ## M7 收尾
