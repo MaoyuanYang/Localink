@@ -62,6 +62,16 @@ public interface RedisCache {
     RedisHyperLogLogOps hyperloglogs();
 
     /**
+     * BitMap 结构操作（M6-F 扩组）。
+     */
+    RedisBitMapOps bitmaps();
+
+    /**
+     * GEO 结构操作（M6-F 扩组）。
+     */
+    RedisGeoOps geos();
+
+    /**
      * Lua 脚本执行（多 key 原子操作）。
      */
     RedisScriptOps scripts();

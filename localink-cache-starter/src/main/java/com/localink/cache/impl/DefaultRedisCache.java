@@ -3,6 +3,8 @@ package com.localink.cache.impl;
 import com.localink.cache.KeyBuild;
 import com.localink.cache.RedisCache;
 import com.localink.cache.RedisHashOps;
+import com.localink.cache.RedisBitMapOps;
+import com.localink.cache.RedisGeoOps;
 import com.localink.cache.RedisHyperLogLogOps;
 import com.localink.cache.RedisScriptOps;
 import com.localink.cache.RedisSetOps;
@@ -25,6 +27,8 @@ public class DefaultRedisCache implements RedisCache {
     private final RedisSetOps setOps;
     private final RedisZSetOps zsetOps;
     private final RedisHyperLogLogOps hyperLogLogOps;
+    private final RedisBitMapOps bitMapOps;
+    private final RedisGeoOps geoOps;
     private final RedisScriptOps scriptOps;
 
     public DefaultRedisCache(StringRedisTemplate redisTemplate) {
@@ -34,6 +38,8 @@ public class DefaultRedisCache implements RedisCache {
         this.setOps = new DefaultRedisSetOps(redisTemplate);
         this.zsetOps = new DefaultRedisZSetOps(redisTemplate);
         this.hyperLogLogOps = new DefaultRedisHyperLogLogOps(redisTemplate);
+        this.bitMapOps = new DefaultRedisBitMapOps(redisTemplate);
+        this.geoOps = new DefaultRedisGeoOps(redisTemplate);
         this.scriptOps = new DefaultRedisScriptOps(redisTemplate);
     }
 
@@ -89,6 +95,16 @@ public class DefaultRedisCache implements RedisCache {
     @Override
     public RedisHyperLogLogOps hyperloglogs() {
         return hyperLogLogOps;
+    }
+
+    @Override
+    public RedisBitMapOps bitmaps() {
+        return bitMapOps;
+    }
+
+    @Override
+    public RedisGeoOps geos() {
+        return geoOps;
     }
 
     @Override
