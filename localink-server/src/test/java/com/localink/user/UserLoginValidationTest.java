@@ -17,7 +17,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class UserLoginValidationTest {
 
     private final MockMvc mockMvc = MockMvcBuilders
-            .standaloneSetup(new UserController(mock(UserService.class)))
+            .standaloneSetup(new UserController(mock(UserService.class), mock(com.localink.service.SignService.class)))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
 
