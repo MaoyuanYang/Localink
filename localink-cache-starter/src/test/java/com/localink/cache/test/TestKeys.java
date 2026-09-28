@@ -23,7 +23,13 @@ enum TestKeys implements KeyTemplate {
 
     HASH_TAG("test:m22:tag:{%s}"),
 
-    BLOOM("test:m28:bloom");
+    BLOOM("test:m28:bloom"),
+
+    HLL_A("test:m6e:hll:a"),
+
+    HLL_B("test:m6e:hll:b"),
+
+    HLL_UNION("test:m6e:hll:union");
 
     private final String template;
 
