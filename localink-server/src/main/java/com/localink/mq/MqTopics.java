@@ -23,4 +23,10 @@ public final class MqTopics {
      * （单写语义），分区 3。消息只带 postId+事件类型，消费端查 DB 组装 upsert/删文档。
      */
     public static final String POST_SEARCH_SYNC = "post-search-sync";
+
+    /**
+     * 帖子异步审核（M6-F）：key=postId，固定消费组。发帖同步初筛通过后投递，
+     * 消费端隐性词库复审——命中则驳回（audit=2）并复用 PostDeletedEvent 删 ES。
+     */
+    public static final String POST_AUDIT = "post-audit";
 }

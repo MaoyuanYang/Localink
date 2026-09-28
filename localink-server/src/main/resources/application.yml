@@ -72,6 +72,9 @@ localink:
       post-search-sync:
         partitions: 3
         replicas: 1
+      post-audit:
+        partitions: 3
+        replicas: 1
   cache:
     bloom:
       filters:

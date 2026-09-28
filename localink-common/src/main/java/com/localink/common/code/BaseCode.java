@@ -24,6 +24,8 @@ public enum BaseCode {
     SMS_CODE_INVALID(20002, "验证码错误"),
     SMS_CODE_EXPIRED(20003, "验证码已过期，请重新获取"),
 
+    POST_AUDIT_REJECTED(30001, "内容包含敏感词，已被驳回"),
+
     SYSTEM_ERROR(40000, "系统繁忙，请稍后再试"),
     PARAM_ERROR(40001, "请求参数错误"),
     UNAUTHORIZED(40002, "未登录或登录已过期"),
