@@ -3,6 +3,7 @@ package com.localink.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.localink.api.dto.ShopDTO;
 import com.localink.api.vo.ShopVO;
+import com.localink.api.vo.ShopNearbyVO;
 import com.localink.common.result.Result;
 import com.localink.service.ShopService;
 import lombok.RequiredArgsConstructor;
@@ -51,5 +52,15 @@ public class ShopController {
     public Result<Void> delete(@PathVariable Long id) {
         shopService.delete(id);
         return Result.ok();
+    }
+
+    @GetMapping("/nearby")
+    public Result<java.util.List<ShopNearbyVO>> nearby(
+            @RequestParam double longitude,
+            @RequestParam double latitude,
+            @RequestParam(defaultValue = "5000") double radius,
+            @RequestParam(defaultValue = "10") int count) {
+        return Result.ok(shopService.nearby(longitude, latitude, radius,
+                Math.max(1, Math.min(50, count))));
     }
 }

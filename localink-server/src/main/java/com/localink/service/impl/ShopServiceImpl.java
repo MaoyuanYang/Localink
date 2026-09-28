@@ -6,6 +6,7 @@ import com.alibaba.fastjson2.TypeReference;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.localink.api.dto.ShopDTO;
+import com.localink.api.vo.ShopNearbyVO;
 import com.localink.api.vo.ShopVO;
 import com.localink.cache.KeyBuild;
 import com.localink.cache.KeyBuilder;
@@ -33,6 +34,7 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 
 import java.lang.reflect.Type;
+import java.util.List;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.concurrent.ThreadLocalRandom;
@@ -185,6 +187,7 @@ public class ShopServiceImpl implements ShopService {
         BeanUtils.copyProperties(dto, shop, "id");
         shopMapper.insert(shop);
         bloomFilterRegistry.add(BloomFilterAlias.SHOP, String.valueOf(shop.getId()));
+        addToGeo(shop);
         return String.valueOf(shop.getId());
     }
 
@@ -197,6 +200,8 @@ public class ShopServiceImpl implements ShopService {
         Shop shop = new Shop();
         BeanUtils.copyProperties(dto, shop);
         shopMapper.updateById(shop);
+        // GEO 覆盖写：member 已存在则坐标更新（GEOADD 幂等语义）
+        addToGeo(shop);
         redisCache.delete(shopKey(dto.getId()));
         shopLocalCache.invalidate(localKey(dto.getId()));
         broadcastInvalidate(dto.getId());
@@ -206,9 +211,45 @@ public class ShopServiceImpl implements ShopService {
     public void delete(Long id) {
         requireExists(id);
         shopMapper.deleteById(id);
+        redisCache.geos().remove(keyBuilder.build(KeyManage.SHOP_GEO), String.valueOf(id));
         redisCache.delete(shopKey(id));
         shopLocalCache.invalidate(localKey(id));
         broadcastInvalidate(id);
+    }
+
+    @Override
+    public java.util.List<ShopNearbyVO> nearby(double longitude, double latitude,
+                                               double radiusMeters, int count) {
+        var entries = redisCache.geos().search(keyBuilder.build(KeyManage.SHOP_GEO),
+                longitude, latitude, radiusMeters, count);
+        if (entries.isEmpty()) {
+            return List.of();
+        }
+        // 批量回填防 N+1（顺序按 GEO 距离升序保持）
+        var shops = shopMapper.selectBatchIds(
+                entries.stream().map(e -> Long.valueOf(e.member())).toList());
+        var byId = new java.util.HashMap<Long, Shop>();
+        shops.forEach(shop -> byId.put(shop.getId(), shop));
+        return entries.stream().map(entry -> {
+            Long id = Long.valueOf(entry.member());
+            ShopNearbyVO vo = new ShopNearbyVO();
+            vo.setId(id);
+            vo.setDistance(entry.distanceMeters());
+            Shop shop = byId.get(id);
+            if (shop != null) {
+                vo.setName(shop.getName());
+                vo.setTypeId(shop.getTypeId());
+                vo.setAddress(shop.getAddress());
+            }
+            return vo;
+        }).toList();
+    }
+
+    private void addToGeo(Shop shop) {
+        if (shop.getLongitude() != null && shop.getLatitude() != null) {
+            redisCache.geos().add(keyBuilder.build(KeyManage.SHOP_GEO),
+                    shop.getLongitude(), shop.getLatitude(), String.valueOf(shop.getId()));
+        }
     }
 
     private KeyBuild shopKey(Long id) {

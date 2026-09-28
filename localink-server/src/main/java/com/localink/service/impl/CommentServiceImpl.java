@@ -10,6 +10,7 @@ import com.localink.common.code.BaseCode;
 import com.localink.common.exception.LocalinkException;
 import com.localink.entity.Post;
 import com.localink.entity.PostComment;
+import com.localink.framework.dfa.SensitiveWordDFA;
 import com.localink.framework.holder.UserHolder;
 import com.localink.mapper.PostCommentMapper;
 import com.localink.mapper.PostMapper;
@@ -36,6 +37,7 @@ public class CommentServiceImpl implements CommentService {
 
     private final PostCommentMapper commentMapper;
     private final PostMapper postMapper;
+    private final SensitiveWordDFA sensitiveWordDfa;
     @Lazy
     private final PostServiceImpl postService;
 
@@ -47,6 +49,10 @@ public class CommentServiceImpl implements CommentService {
             throw new LocalinkException(BaseCode.NOT_FOUND, "帖子不存在或未过审");
         }
         validateHierarchy(dto);
+        // 同步初筛（M6-F）：评论与帖同级拦截显性词；异步状态机不做（演进声明见任务卡）
+        if (sensitiveWordDfa.contains(dto.getContent())) {
+            throw new LocalinkException(BaseCode.POST_AUDIT_REJECTED);
+        }
         PostComment comment = new PostComment();
         comment.setPostId(dto.getPostId());
         comment.setUserId(UserHolder.get().getId());

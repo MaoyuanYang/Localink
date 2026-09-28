@@ -170,7 +170,20 @@ public enum KeyManage implements KeyTemplate {
      * M6-E：HotRankJob 定时全量重算（候选集=近期新帖∪现役榜帖，事实源=liked/comments/UV 三处直查，
      * 零行为挂点）；跌出候选集即 ZREM。与 POST_LIKE_TOP（单一行为计数榜）服务不同页面，不合并。
      */
-    POST_HOT_TOP("post:hot:top", null, "帖子热榜快照（ZSet member=postId score=加权分×e^(-λΔt)，M6-E 定时全量重算）");
+    POST_HOT_TOP("post:hot:top", null, "帖子热榜快照（ZSet member=postId score=加权分×e^(-λΔt)，M6-E 定时全量重算）"),
+
+    /**
+     * 用户按月签到（BitMap：第 dayOfMonth-1 位=当天，今天在最低位，M6-F）。连续签到=
+     * BITFIELD 取本月 1 日至今位串从最低位数连续 1，顶满跨月续查。TTL 62 天由签到动作
+     * 显式续期（SETBIT 不带 TTL）；丢失=签到记录丢失，接受（database.md §7）。
+     */
+    USER_SIGN("user:sign:%s:%s", Duration.ofDays(62), "用户按月签到（BitMap 今天在最低位，M6-F；参：userId, yyyyMM）"),
+
+    /**
+     * 商户地理位置（GEO：member=shopId，底层=ZSet+geohash 52 位整数 score，M6-F）。
+     * 启动全量灌入（坐标非 0）+ 商户 CRUD 增量维护；nearby 按距离升序圈选。
+     */
+    SHOP_GEO("geo:shop", null, "商户地理位置（GEO member=shopId，M6-F；由 lk_shop 全量灌入重算）");
 
     private final String template;
     private final Duration ttl;

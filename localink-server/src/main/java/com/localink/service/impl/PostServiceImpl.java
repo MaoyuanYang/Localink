@@ -18,9 +18,13 @@ import com.localink.entity.PostLike;
 import com.localink.entity.User;
 import com.localink.event.PostCreatedEvent;
 import com.localink.event.PostDeletedEvent;
+import com.localink.framework.dfa.SensitiveWordDFA;
 import com.localink.framework.holder.UserHolder;
 import com.localink.mapper.PostCommentMapper;
 import com.localink.mapper.PostLikeMapper;
+import com.localink.mq.MessageProducer;
+import com.localink.mq.MqTopics;
+import com.localink.mq.PostAuditMessage;
 import com.localink.mapper.PostMapper;
 import com.localink.mapper.UserMapper;
 import com.localink.service.PostService;
@@ -55,10 +59,16 @@ public class PostServiceImpl implements PostService {
     private final RedisCache redisCache;
     private final KeyBuilder keyBuilder;
     private final ApplicationEventPublisher eventPublisher;
+    private final SensitiveWordDFA sensitiveWordDfa;
+    private final MessageProducer messageProducer;
 
     @Override
     @Transactional
     public String create(PostCreateDTO dto) {
+        // 同步初筛（M6-F）：确定性已知风险挡在落库前——显性词库命中直接拒发帖（先审后发档）
+        if (sensitiveWordDfa.contains(dto.getTitle() + dto.getContent())) {
+            throw new LocalinkException(BaseCode.POST_AUDIT_REJECTED);
+        }
         Post post = new Post();
         post.setUserId(UserHolder.get().getId());
         post.setShopId(dto.getShopId());
@@ -73,6 +83,10 @@ public class PostServiceImpl implements PostService {
         // 发帖即事实：Feed 收件箱（进程内投影）与 ES 同步（跨进程 MQ 投影，M6-D）订阅该事件；
         // 订阅方一律 AFTER_COMMIT——事务内发布，提交后才消费，回滚不留幻影
         eventPublisher.publishEvent(new PostCreatedEvent(post.getId(), post.getUserId()));
+        // 先发后审档（M6-F）：audit=1 先放行立即可见，提交后投异步复审——隐性词库命中再收回
+        Long postId = post.getId();
+        TxCallbacks.afterCommit(() -> messageProducer.sendAsync(
+                MqTopics.POST_AUDIT, String.valueOf(postId), new PostAuditMessage(postId)));
         return String.valueOf(post.getId());
     }
 

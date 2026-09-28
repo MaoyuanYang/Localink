@@ -292,6 +292,44 @@ class RedisCacheIntegrationTest {
     }
 
     @Test
+    void bitmapSetGetCountAndFieldRead() {
+        redisCache.delete(keyBuilder.build(TestKeys.BITMAP));
+        redisCache.bitmaps().setBit(keyBuilder.build(TestKeys.BITMAP), 0, true);
+        redisCache.bitmaps().setBit(keyBuilder.build(TestKeys.BITMAP), 2, true);
+        redisCache.bitmaps().setBit(keyBuilder.build(TestKeys.BITMAP), 2, true);
+        assertTrue(redisCache.bitmaps().getBit(keyBuilder.build(TestKeys.BITMAP), 0));
+        assertFalse(redisCache.bitmaps().getBit(keyBuilder.build(TestKeys.BITMAP), 1));
+        assertEquals(2L, redisCache.bitmaps().bitCount(keyBuilder.build(TestKeys.BITMAP)), "幂等置位不重复计数");
+        // 位串 101（今天=最低位）：BITFIELD u3 取 3 位无符号数=5
+        assertEquals(5L, redisCache.bitmaps().getUnsigned(keyBuilder.build(TestKeys.BITMAP), 3, 0));
+        // 非回文位串锁死位序规范化：bits 0/1 置位（011），原生 BITFIELD MSB 位序会读成 110=6
+        redisCache.delete(keyBuilder.build(TestKeys.BITMAP));
+        redisCache.bitmaps().setBit(keyBuilder.build(TestKeys.BITMAP), 0, true);
+        redisCache.bitmaps().setBit(keyBuilder.build(TestKeys.BITMAP), 1, true);
+        assertEquals(3L, redisCache.bitmaps().getUnsigned(keyBuilder.build(TestKeys.BITMAP), 3, 0));
+    }
+
+    @Test
+    void geoAddSearchAscendingWithDistance() {
+        redisCache.delete(keyBuilder.build(TestKeys.GEO));
+        // 同一纬度上经度每差 0.01 约 960 米
+        // center 在圆心（距离 0），away 在经度 +0.01°（≈960m）
+        redisCache.geos().add(keyBuilder.build(TestKeys.GEO), 120.00, 30.00, "center");
+        redisCache.geos().add(keyBuilder.build(TestKeys.GEO), 120.01, 30.00, "away");
+        List<com.localink.cache.RedisGeoOps.GeoEntry> results = redisCache.geos()
+                .search(keyBuilder.build(TestKeys.GEO), 120.00, 30.00, 5000, 10);
+        assertEquals(2, results.size());
+        assertEquals("center", results.get(0).member(), "按距离升序");
+        assertEquals(0.0, results.get(0).distanceMeters(), 1.0, "圆心自身距离为 0");
+        assertEquals("away", results.get(1).member());
+        assertEquals(960.0, results.get(1).distanceMeters(), 50.0, "经度 0.01°≈960m");
+        // 半径过滤：500m 内只有 center
+        List<com.localink.cache.RedisGeoOps.GeoEntry> tight = redisCache.geos()
+                .search(keyBuilder.build(TestKeys.GEO), 120.00, 30.00, 500, 10);
+        assertEquals(List.of("center"), tight.stream().map(com.localink.cache.RedisGeoOps.GeoEntry::member).toList());
+    }
+
+    @Test
     void commonHasKeyDeleteExpire() {
         assertFalse(redisCache.hasKey(stringKey));
         redisCache.strings().set(stringKey, "v");

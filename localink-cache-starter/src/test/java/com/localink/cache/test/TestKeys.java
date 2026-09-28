@@ -29,7 +29,11 @@ enum TestKeys implements KeyTemplate {
 
     HLL_B("test:m6e:hll:b"),
 
-    HLL_UNION("test:m6e:hll:union");
+    HLL_UNION("test:m6e:hll:union"),
+
+    BITMAP("test:m6f:bitmap"),
+
+    GEO("test:m6f:geo");
 
     private final String template;
 
