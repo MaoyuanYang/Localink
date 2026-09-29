@@ -83,6 +83,6 @@ curl http://localhost:8086/ping   # -> pong
 - **M3 秒杀核心链路（五个主题）**：纯 DB 与超卖实录（基线 QPS 88.8/s）→ 分布式锁与一人一单 → Redis+Lua+Kafka 异步秒杀（QPS 74.9 → 168、峰值吸收 847/s、Avg -81%）→ 一致性闭环（幂等/消费可靠性/对账日志 traceId 三层串联）→ 流量防线（令牌桶/滑动窗口限流、@RateLimit 双维度、前置令牌）
 - **M4 数据层扩展**：自研雪花（时钟回拨分档）+ Redis 轮转机器位 → ShardingSphere 5.5.1 双库分片（库 user_id%/表 voucher_id%）+ 订单路由表
 
-当前测试基线 **287/287**（分模块 cache 52 / lock 9 / idempotent 6 / ratelimit 16 / mq 4 / delay 3 / id 9 / search 1 / server 187）。**M6 社区扩展六主题全部收官**：A 内容基础、B 互动关系、C Feed 流、D 搜索、E 热点统计、F 风控与特色（DFA 两级审核+BitMap 签到+GEO 附近商户，m2-1 预留的 Redis 结构扩组点全部兑现）。下一步：M7-A 全链路压测与调优。
+当前测试基线 **287/287**（分模块 cache 52 / lock 9 / idempotent 6 / ratelimit 16 / mq 4 / delay 3 / id 9 / search 1 / server 187）。**M6 社区扩展六主题全部收官**：A 内容基础、B 互动关系、C Feed 流、D 搜索、E 热点统计、F 风控与特色（DFA 两级审核+BitMap 签到+GEO 附近商户，m2-1 预留的 Redis 结构扩组点全部兑现）。**M7-A 全链路压测与调优收官（2026-09-28）**：JMeter 三场景实测（拒绝 40002/10007、缓存命中、成功路径两步流），调优 = Tomcat accept-count=1000 治突发拒连 + Hikari ds_0 池硬编码透出后 10→30 治爆池 + Kafka 消费并发 1→3 对齐 3 分区（threads=400 实验数据证明 CPU 饱和下盲目加线程是负优化，反例保留在任务卡）——缓存命中 4672→**12310 QPS**（P99 172ms）、未登录拒绝 3722→**5333**（P99 461ms）、无效令牌拒绝 **1630**（Redis 往返主导）、成功路径 400 并发正确率 75%→**100%**（拒连与爆池 500 归零）。下一步：M7-B 交付与面试弹药。
 
 完整进度见 [docs/roadmap.md](docs/roadmap.md)。
