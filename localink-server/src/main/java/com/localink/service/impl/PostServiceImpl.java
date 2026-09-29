@@ -65,8 +65,10 @@ public class PostServiceImpl implements PostService {
     @Override
     @Transactional
     public String create(PostCreateDTO dto) {
-        // 同步初筛（M6-F）：确定性已知风险挡在落库前——显性词库命中直接拒发帖（先审后发档）
-        if (sensitiveWordDfa.contains(dto.getTitle() + dto.getContent())) {
+        // 同步初筛（M6-F）：确定性已知风险挡在落库前——显性词库命中直接拒发帖（先审后发档）。
+        // title/content 分开扫描：拼接会跨字段误杀（标题尾字+正文首字拼出敏感词）
+        if (sensitiveWordDfa.contains(dto.getTitle() == null ? "" : dto.getTitle())
+                || sensitiveWordDfa.contains(dto.getContent() == null ? "" : dto.getContent())) {
             throw new LocalinkException(BaseCode.POST_AUDIT_REJECTED);
         }
         Post post = new Post();
@@ -131,7 +133,10 @@ public class PostServiceImpl implements PostService {
 
     @Override
     public PageVO<PostVO> page(long page, long size, Long shopId) {
-        Page<Post> result = postMapper.selectPage(new Page<>(page, size),
+        // 参数钳制（B-19）：防 size 无上限拉全表
+        long safePage = Math.max(1, page);
+        long safeSize = Math.min(Math.max(1, size), 50);
+        Page<Post> result = postMapper.selectPage(new Page<>(safePage, safeSize),
                 new LambdaQueryWrapper<Post>()
                         .eq(Post::getAuditStatus, AUDIT_PASSED)
                         .eq(shopId != null, Post::getShopId, shopId)

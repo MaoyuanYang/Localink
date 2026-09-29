@@ -32,14 +32,26 @@ public class ShopGeoInitializer implements ApplicationRunner {
         List<Shop> shops = shopMapper.selectList(null);
         long count = shops.stream()
                 .filter(this::hasCoordinate)
-                .peek(shop -> redisCache.geos().add(keyBuilder.build(KeyManage.SHOP_GEO),
-                        shop.getLongitude(), shop.getLatitude(), String.valueOf(shop.getId())))
-                .count();
+                .mapToLong(shop -> {
+                    // 逐店容错：单条脏数据（历史越界坐标/Redis 抖动）只跳过自身，
+                    // 绝不让 ApplicationRunner 失败拖垮整个应用启动
+                    try {
+                        redisCache.geos().add(keyBuilder.build(KeyManage.SHOP_GEO),
+                                shop.getLongitude(), shop.getLatitude(), String.valueOf(shop.getId()));
+                        return 1;
+                    } catch (Exception e) {
+                        log.error("商户 GEO 灌入失败(脏坐标行已跳过), shopId={}, lon={}, lat={}",
+                                shop.getId(), shop.getLongitude(), shop.getLatitude(), e);
+                        return 0;
+                    }
+                }).sum();
         log.info("商户 GEO 灌入完成, total={}, indexed={}", shops.size(), count);
     }
 
     private boolean hasCoordinate(Shop shop) {
         return shop.getLongitude() != null && shop.getLatitude() != null
-                && (shop.getLongitude() != 0.0 || shop.getLatitude() != 0.0);
+                && (shop.getLongitude() != 0.0 || shop.getLatitude() != 0.0)
+                && shop.getLongitude() >= -180.0 && shop.getLongitude() <= 180.0
+                && shop.getLatitude() >= -90.0 && shop.getLatitude() <= 90.0;
     }
 }

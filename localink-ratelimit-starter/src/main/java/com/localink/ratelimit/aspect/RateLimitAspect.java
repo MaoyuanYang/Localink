@@ -1,6 +1,7 @@
 package com.localink.ratelimit.aspect;
 
 import com.localink.common.code.BaseCode;
+import com.localink.common.metrics.MetricsPort;
 import com.localink.common.exception.LocalinkException;
 import com.localink.ratelimit.Dimension;
 import com.localink.ratelimit.RateLimit;
@@ -34,15 +35,18 @@ public class RateLimitAspect {
     private final RateLimitAdmin admin;
     private final RateLimitProperties properties;
     private final ObjectProvider<RateLimitUserResolver> userResolverProvider;
+    private final ObjectProvider<MetricsPort> metricsPort;
     private volatile boolean resolverMissingWarned;
 
     public RateLimitAspect(RateLimiter rateLimiter, RateLimitAdmin admin,
                            RateLimitProperties properties,
-                           ObjectProvider<RateLimitUserResolver> userResolverProvider) {
+                           ObjectProvider<RateLimitUserResolver> userResolverProvider,
+                           ObjectProvider<MetricsPort> metricsPort) {
         this.rateLimiter = rateLimiter;
         this.admin = admin;
         this.properties = properties;
         this.userResolverProvider = userResolverProvider;
+        this.metricsPort = metricsPort;
     }
 
     @Around("@annotation(rateLimit)")
@@ -65,6 +69,8 @@ public class RateLimitAspect {
             return;
         }
         if (admin.isBanned(ip)) {
+            metricsPort.getIfAvailable(() -> MetricsPort.NOOP)
+                    .increment("localink.ratelimit.rejected", "scene", rateLimit.scene(), "reason", "banned");
             throw new LocalinkException(BaseCode.RATE_LIMITED, "访问受限");
         }
         SceneRule rule = properties.getScenes().get(rateLimit.scene());
@@ -79,6 +85,9 @@ public class RateLimitAspect {
             }
             if (!acquire(rule.effective(dimension), rateLimit.scene() + ":" + dimValue).allowed()) {
                 log.warn("限流拒绝, scene={}, dimension={}, key={}", rateLimit.scene(), dimension, dimValue);
+                metricsPort.getIfAvailable(() -> MetricsPort.NOOP)
+                        .increment("localink.ratelimit.rejected", "scene", rateLimit.scene(),
+                                "reason", "over_limit");
                 throw new LocalinkException(BaseCode.RATE_LIMITED);
             }
         }

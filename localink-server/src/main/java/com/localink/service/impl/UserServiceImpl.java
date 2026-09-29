@@ -64,4 +64,11 @@ public class UserServiceImpl implements UserService {
         fields.put(UserConstants.FIELD_LEVEL, String.valueOf(user.getLevel()));
         redisCache.hashes().putAll(keyBuilder.build(KeyManage.USER_TOKEN, token), fields, KeyManage.USER_TOKEN.getTtl());
     }
+
+    @Override
+    public void logout(String token) {
+        if (token != null && !token.isBlank()) {
+            redisCache.delete(keyBuilder.build(KeyManage.USER_TOKEN, token));
+        }
+    }
 }

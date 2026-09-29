@@ -4,6 +4,7 @@ import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.localink.cache.KeyBuilder;
+import com.localink.common.metrics.MetricsPort;
 import com.localink.config.ReconcileProperties;
 import com.localink.constant.KeyManage;
 import com.localink.entity.RollbackFailureLog;
@@ -21,7 +22,9 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -49,6 +52,8 @@ public class ReconciliationJob {
     private final RollbackFailureLogMapper rollbackFailureLogMapper;
     private final VoucherOrderService voucherOrderService;
     private final ReconcileProperties properties;
+    private final Duration orderCloseDelay;
+    private final org.springframework.beans.factory.ObjectProvider<MetricsPort> metricsPort;
 
     public ReconciliationJob(StringRedisTemplate redisTemplate,
                              KeyBuilder keyBuilder,
@@ -56,7 +61,10 @@ public class ReconciliationJob {
                              VoucherOrderMapper orderMapper,
                              RollbackFailureLogMapper rollbackFailureLogMapper,
                              VoucherOrderService voucherOrderService,
-                             ReconcileProperties properties) {
+                             ReconcileProperties properties,
+                             @org.springframework.beans.factory.annotation.Value(
+                                     "${localink.order.close-delay:15m}") Duration orderCloseDelay,
+                             org.springframework.beans.factory.ObjectProvider<MetricsPort> metricsPort) {
         this.redisTemplate = redisTemplate;
         this.keyBuilder = keyBuilder;
         this.reconcileLogMapper = reconcileLogMapper;
@@ -64,6 +72,8 @@ public class ReconciliationJob {
         this.rollbackFailureLogMapper = rollbackFailureLogMapper;
         this.voucherOrderService = voucherOrderService;
         this.properties = properties;
+        this.orderCloseDelay = orderCloseDelay;
+        this.metricsPort = metricsPort;
     }
 
     /**
@@ -92,36 +102,67 @@ public class ReconciliationJob {
                     continue;
                 }
                 for (Map.Entry<Object, Object> entry : redisTemplate.opsForHash().entries(key).entrySet()) {
-                    JSONObject flow = JSONObject.parseObject(String.valueOf(entry.getValue()));
-                    if (flow.getIntValue("logType") == 2) {
-                        flipped += settleRestoredTrace(flow.getLongValue("traceId"));
-                        continue;
-                    }
-                    Long traceId = flow.getLongValue("traceId");
-                    Long userId = flow.getLongValue("userId");
-                    VoucherReconcileLog deductRow = reconcileLogMapper.selectOne(
-                            new LambdaQueryWrapper<VoucherReconcileLog>()
-                                    .eq(VoucherReconcileLog::getTraceId, traceId)
-                                    .eq(VoucherReconcileLog::getLogType, 1)
-                                    .last("LIMIT 1"));
-                    if (deductRow == null) {
-                        // 宽限期只保护差异判定（DB 无行可能是建单在途，宁晚勿误）；
-                        // 一致确认（有行）不受限——翻牌无害，随到随翻
-                        if (withinGrace(flow.getLongValue("ts"))) {
+                    // 逐笔隔离：单条损坏流水（JSON 解析失败/字段漂移）只跳过自身，
+                    // 不再冒泡中止整轮对账（含失败表重试），否则毒流水会让对账永久卡死在同一位置
+                    try {
+                        JSONObject flow = JSONObject.parseObject(String.valueOf(entry.getValue()));
+                        if (flow.getIntValue("logType") == 2) {
+                            flipped += settleRestoredTrace(flow.getLongValue("traceId"));
                             continue;
                         }
-                        compensate(voucherId, userId, traceId);
-                        compensated++;
-                    } else {
-                        compensated += settleAccordingToOrderState(deductRow, voucherId, userId, traceId,
-                                flow.getLongValue("ts"));
+                        Long traceId = flow.getLongValue("traceId");
+                        Long userId = flow.getLongValue("userId");
+                        VoucherReconcileLog deductRow = reconcileLogMapper.selectOne(
+                                new LambdaQueryWrapper<VoucherReconcileLog>()
+                                        .eq(VoucherReconcileLog::getTraceId, traceId)
+                                        .eq(VoucherReconcileLog::getLogType, 1)
+                                        .last("LIMIT 1"));
+                        if (deductRow == null) {
+                            // 宽限期只保护差异判定（DB 无行可能是建单在途，宁晚勿误）；
+                            // 一致确认（有行）不受限——翻牌无害，随到随翻
+                            if (withinGrace(flow.getLongValue("ts"))) {
+                                continue;
+                            }
+                            compensate(voucherId, userId, traceId);
+                            compensated++;
+                        } else {
+                            compensated += settleAccordingToOrderState(deductRow, voucherId, userId, traceId,
+                                    flow.getLongValue("ts"));
+                        }
+                    } catch (Exception e) {
+                        log.error("对账单笔处理异常, 已跳过该流水, key={}, field={}",
+                                key, entry.getKey(), e);
                     }
                 }
             }
         }
+        compensated += closeOverdueCreatedOrders();
         retryRollbackFailures();
         log.info("对账完成: 差异补偿={}笔, 状态翻牌={}笔", compensated, flipped);
         return compensated;
+    }
+
+    /**
+     * 挂单补裁（A-3）：延迟任务"take 即离队、崩溃即丢、重试耗尽仅告警"，丢失后 status=1 订单
+     * 原会被 settleAccordingToOrderState 翻牌为"一致"且无任何回收路径。这里兜底扫一遍
+     * 超过 关单延迟+宽限期 仍处创建态的订单，走条件关单幂等闸门补关——与延迟任务并发安全。
+     */
+    private int closeOverdueCreatedOrders() {
+        LocalDateTime deadline = LocalDateTime.now()
+                .minus(orderCloseDelay)
+                .minusMinutes(properties.getGraceMinutes());
+        List<VoucherOrder> overdue = orderMapper.selectList(new LambdaQueryWrapper<VoucherOrder>()
+                .eq(VoucherOrder::getStatus, 1)
+                .lt(VoucherOrder::getCreateTime, deadline)
+                .last("LIMIT 50"));
+        for (VoucherOrder order : overdue) {
+            log.warn("延迟关单任务疑似丢失, 对账补关单, orderId={}, createTime={}",
+                    order.getId(), order.getCreateTime());
+            voucherOrderService.closeOrderIfExpired(order.getId());
+            metricsPort.getIfAvailable(() -> MetricsPort.NOOP)
+                    .increment("localink.order.close", "source", "reconcile_sweep");
+        }
+        return overdue.size();
     }
 
     /**
@@ -198,11 +239,13 @@ public class ReconciliationJob {
                 voucherId, userId, traceId);
         voucherOrderService.rollbackSeckillQualification(voucherId, userId, traceId, traceId,
                 "RECONCILE", "redis deducted but no db row, grace exceeded");
+        metricsPort.getIfAvailable(() -> MetricsPort.NOOP).increment("localink.reconcile.compensated");
     }
 
     /**
-     * 回滚失败表重试：先删旧行再走统一回滚入口——成功即收敛（Lua"无需补偿"或完成都不落新行）；
-     * 失败则入口自动落新行回到表内。行龄超过阈值仍存在 = 长期不收敛，error 告警人工介入。
+     * 回滚失败表重试：成功（回滚完成或判定无需补偿）才删行；失败保留原行并累加 retry_attempts——
+     * 行龄（create_time）随失败持续增长，超过阈值仍存在 = 长期不收敛，error 告警人工介入。
+     * 原"删旧走新"会使失败行每轮重置 create_time，行龄告警结构性不可达，已废弃。
      */
     private void retryRollbackFailures() {
         LocalDateTime alarmBefore = LocalDateTime.now().minusHours(properties.getFailureAgeAlarmHours());
@@ -212,14 +255,24 @@ public class ReconciliationJob {
                         failure.getId(), failure.getVoucherId(), failure.getUserId(),
                         failure.getRetryAttempts(), failure.getCreateTime());
             }
-            rollbackFailureLogMapper.deleteById(failure.getId());
-            try {
-                voucherOrderService.rollbackSeckillQualification(failure.getVoucherId(),
-                        failure.getUserId(), failure.getOrderId(), failure.getTraceId(),
-                        "RETRY", "reconcile retry of source=" + failure.getSource());
-            } catch (Exception e) {
-                log.error("回滚失败表重试异常, 行已删除, 失败入口已重新落表, voucherId={}, userId={}",
-                        failure.getVoucherId(), failure.getUserId(), e);
+            boolean converged = voucherOrderService.rollbackSeckillQualification(failure.getVoucherId(),
+                    failure.getUserId(), failure.getOrderId(), failure.getTraceId(),
+                    "RETRY", "reconcile retry of source=" + failure.getSource());
+            if (converged) {
+                rollbackFailureLogMapper.deleteById(failure.getId());
+            } else {
+                // 统一入口失败路径会另插新行——删除同 (voucher,user) 的更新重复行，
+                // 保留本行（原始 create_time 不重置，行龄告警才可达）
+                rollbackFailureLogMapper.delete(new LambdaQueryWrapper<RollbackFailureLog>()
+                        .eq(RollbackFailureLog::getVoucherId, failure.getVoucherId())
+                        .eq(RollbackFailureLog::getUserId, failure.getUserId())
+                        .gt(RollbackFailureLog::getId, failure.getId()));
+                rollbackFailureLogMapper.update(null, new LambdaUpdateWrapper<RollbackFailureLog>()
+                        .eq(RollbackFailureLog::getId, failure.getId())
+                        .set(RollbackFailureLog::getRetryAttempts,
+                                (failure.getRetryAttempts() == null ? 0 : failure.getRetryAttempts()) + 1));
+                log.error("回滚失败表重试未收敛, 行保留待下轮, id={}, voucherId={}, userId={}",
+                        failure.getId(), failure.getVoucherId(), failure.getUserId());
             }
         }
     }

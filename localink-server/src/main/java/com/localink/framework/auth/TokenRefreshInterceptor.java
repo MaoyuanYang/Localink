@@ -10,11 +10,13 @@ import com.localink.framework.holder.UserHolder;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 import java.util.Map;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class TokenRefreshInterceptor implements HandlerInterceptor {
@@ -31,12 +33,25 @@ public class TokenRefreshInterceptor implements HandlerInterceptor {
             return true;
         }
         KeyBuild key = keyBuilder.build(KeyManage.USER_TOKEN, token);
-        Map<String, String> fields = redisCache.hashes().entries(key);
+        Map<String, String> fields;
+        try {
+            fields = redisCache.hashes().entries(key);
+        } catch (Exception e) {
+            // Redis 不可用：降级为匿名放行（fail-closed 而非 500）——受保护端点由
+            // LoginInterceptor 以 40002 拒绝，公开 GET 仍可走 L1 缓存兜底
+            log.error("会话 Redis 读取失败, 本次请求按匿名处理, uri={}", request.getRequestURI(), e);
+            return true;
+        }
         if (fields.isEmpty()) {
             return true;
         }
-        UserHolder.set(toUserDTO(fields));
-        redisCache.expire(key, KeyManage.USER_TOKEN.getTtl());
+        try {
+            UserHolder.set(toUserDTO(fields));
+            redisCache.expire(key, KeyManage.USER_TOKEN.getTtl());
+        } catch (Exception e) {
+            // 会话字段损坏或续期失败：按匿名处理，不放大为 500
+            log.warn("会话解析/续期失败, 本次请求按匿名处理, uri={}", request.getRequestURI(), e);
+        }
         return true;
     }
 

@@ -63,7 +63,8 @@ public class RateLimitAutoConfiguration {
     public RateLimitAspect rateLimitAspect(RateLimiter rateLimiter,
                                            RateLimitAdmin rateLimitAdmin,
                                            RateLimitProperties properties,
-                                           ObjectProvider<RateLimitUserResolver> userResolverProvider) {
-        return new RateLimitAspect(rateLimiter, rateLimitAdmin, properties, userResolverProvider);
+                                           ObjectProvider<RateLimitUserResolver> userResolverProvider,
+                                           org.springframework.beans.factory.ObjectProvider<com.localink.common.metrics.MetricsPort> metricsPort) {
+        return new RateLimitAspect(rateLimiter, rateLimitAdmin, properties, userResolverProvider, metricsPort);
     }
 }

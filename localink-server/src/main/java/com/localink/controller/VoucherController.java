@@ -1,6 +1,7 @@
 package com.localink.controller;
 
 import com.localink.api.dto.VoucherDTO;
+import com.localink.framework.auth.AdminOnly;
 import com.localink.api.vo.VoucherVO;
 import com.localink.common.result.Result;
 import com.localink.service.VoucherService;
@@ -35,17 +36,20 @@ public class VoucherController {
         return Result.ok(voucherService.detail(id));
     }
 
+    @AdminOnly
     @PostMapping
     public Result<String> create(@Validated @RequestBody VoucherDTO dto) {
         return Result.ok(voucherService.create(dto));
     }
 
+    @AdminOnly
     @PutMapping
     public Result<Void> update(@Validated @RequestBody VoucherDTO dto) {
         voucherService.update(dto);
         return Result.ok();
     }
 
+    @AdminOnly
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {
         voucherService.delete(id);

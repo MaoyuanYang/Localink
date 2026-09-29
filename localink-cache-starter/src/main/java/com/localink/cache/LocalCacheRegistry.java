@@ -25,6 +25,7 @@ public class LocalCacheRegistry {
             Cache<Object, Object> cache = Caffeine.newBuilder()
                     .maximumSize(spec.getMaximumSize())
                     .expireAfterWrite(spec.getExpireAfterWrite())
+                    .recordStats()
                     .build();
             caches.put(entry.getKey(), new CaffeineLocalCache<>(cache));
         }

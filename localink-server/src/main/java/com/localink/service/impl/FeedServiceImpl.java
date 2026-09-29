@@ -125,9 +125,19 @@ public class FeedServiceImpl implements FeedService {
                         keyBuilder.build(KeyManage.USER_FOLLOWEE, me.getId()), String.class).stream()
                 .map(Long::valueOf).collect(Collectors.toSet());
         if (followees.isEmpty()) {
-            return ScrollVO.of(List.of(), null);
+            // Redis 丢失/驱逐兜底（B-8）：DB 事实源回查并写穿回缓存，Feed 不因缓存丢失永久空转
+            List<Follow> rows = followMapper.selectList(new LambdaQueryWrapper<Follow>()
+                    .eq(Follow::getUserId, me.getId()));
+            if (rows.isEmpty()) {
+                return ScrollVO.of(List.of(), null);
+            }
+            followees = rows.stream().map(Follow::getFollowUserId).collect(Collectors.toSet());
+            redisCache.sets().add(keyBuilder.build(KeyManage.USER_FOLLOWEE, me.getId()),
+                    followees.stream().map(String::valueOf).toArray());
         }
 
+        // 终态副本：followees 在兜底分支被重赋值，lambda 引用需 effectively-final
+        Set<Long> effectiveFollowees = followees;
         // 两路候选均按 score 倒序，归并去重（防"先推后变大 V"同帖两路出现）取前 size 条
         Map<Long, Double> merged = new LinkedHashMap<>();
         mergeEntries(merged, inboxPage(me.getId(), lastScore, bounded));
@@ -139,7 +149,7 @@ public class FeedServiceImpl implements FeedService {
 
         List<PostVO> records = postService.listOrdered(top.stream().map(Map.Entry::getKey).toList())
                 .stream()
-                .filter(vo -> followees.contains(vo.getUserId()))
+                .filter(vo -> effectiveFollowees.contains(vo.getUserId()))
                 .toList();
         // cursor 取归并结果（回填过滤前）：被过滤帖不阻塞翻页；不足 size 条=两路候选耗尽，到底
         Long nextCursor = top.size() < bounded ? null : top.get(top.size() - 1).getValue().longValue();
@@ -198,7 +208,11 @@ public class FeedServiceImpl implements FeedService {
     }
 
     private long scoreOf(Post post) {
-        long millis = post.getCreateTime().atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
-        return buildScore(millis, post.getId());
+        // 拉路径时间位取"所在秒的末毫秒"（ceiling）：同一帖推路径 score（真实毫秒）恒不大于
+        // 本值——经收件箱已服务过的游标，拉路径不会再放行同一帖（防"先推后变大 V"跨页重复）。
+        // 同秒并列帖在归并侧以插入序（DB 按 id 倒序）保持确定；代价是游标落入某秒中段时该秒内
+        // 更晚的未推帖可能被跳过——概率与影响都远小于跨页重复，从头翻页不受影响
+        long secMillis = post.getCreateTime().atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+        return buildScore(secMillis + 999, post.getId());
     }
 }

@@ -80,3 +80,5 @@ starter 3/3、server 2/2；全 reactor **226/226**（221 基线 + 5），BUILD S
 
 **M5-C 通知与运营统计**：开抢预通知（活动级延迟任务+人群圈选）、订阅通知闭环（ZSet 排队+取消回流自动发券）、
 店铺每日 Top 买家（ZSet 统计+预通知附加圈选）——delay-starter 的第二批消费者。
+
+> **M8 回溯注记（2026-09-29，docs/VERIFICATION.md 审计 + m8-audit-fixes 修复）**：本卡"关单丢一条由对账兜底"原只覆盖 Redis 侧；M8 补强为：

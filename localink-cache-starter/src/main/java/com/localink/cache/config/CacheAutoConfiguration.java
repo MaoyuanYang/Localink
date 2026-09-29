@@ -58,7 +58,10 @@ public class CacheAutoConfiguration {
         Config config = new Config();
         SingleServerConfig singleServer = config.useSingleServer()
                 .setAddress("redis://" + redisProperties.getHost() + ":" + redisProperties.getPort())
-                .setDatabase(redisProperties.getDatabase());
+                .setDatabase(redisProperties.getDatabase())
+                // 显式超时与连通探测：Redis 挂起（非拒连）时避免默认 30s 长阻塞拖垮调用线程
+                .setTimeout(3000)
+                .setPingConnectionInterval(30000);
         if (redisProperties.getPassword() != null && !redisProperties.getPassword().isBlank()) {
             singleServer.setPassword(redisProperties.getPassword());
         }

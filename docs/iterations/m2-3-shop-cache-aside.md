@@ -72,3 +72,5 @@
 ## 6. 下一步
 
 M2.4 缓存穿透：空值缓存——用不存在的 id 轰炸 `GET /api/shop/{id}` 暴露穿透问题，然后空值短 TTL 兜底，`detail` 的 NOT_FOUND 分支成为改造点。
+
+> **M8 回溯注记（2026-09-29，docs/VERIFICATION.md 审计 + m8-audit-fixes 修复）**：本卡的"业务缓存必须设物理 TTL"原则自 M2.7 起演进为**逻辑过期**方案

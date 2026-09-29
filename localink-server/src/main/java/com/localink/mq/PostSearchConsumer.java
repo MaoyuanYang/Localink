@@ -24,7 +24,8 @@ public class PostSearchConsumer extends AbstractKafkaConsumer<PostSearchMessage>
 
     @KafkaListener(
             topics = MqTopics.POST_SEARCH_SYNC,
-            groupId = "localink-server-post-search")
+            groupId = "localink-server-post-search",
+            containerFactory = "postSearchContainerFactory")
     void onMessage(String value, Acknowledgment ack) {
         dispatch(value, ack);
     }

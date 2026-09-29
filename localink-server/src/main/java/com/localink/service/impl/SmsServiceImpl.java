@@ -32,7 +32,7 @@ public class SmsServiceImpl implements SmsService {
         }
         String code = generateCode();
         redisCache.strings().set(key, code, KeyManage.SMS_CODE.getTtl());
-        log.info("模拟发送短信验证码: phone={}, code={}", phone, code);
+        log.info("模拟发送短信验证码: phone={}, code=******"); // 验证码不落日志（B-18），调试从 Redis 取
     }
 
     private String generateCode() {

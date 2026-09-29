@@ -2,6 +2,8 @@ package com.localink.api.dto;
 
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
@@ -27,9 +29,13 @@ public class ShopDTO {
     private String address;
 
     @NotNull(message = "经度不能为空")
+    @DecimalMin(value = "-180.0", message = "经度必须在 [-180,180] 内")
+    @DecimalMax(value = "180.0", message = "经度必须在 [-180,180] 内")
     private Double longitude;
 
     @NotNull(message = "纬度不能为空")
+    @DecimalMin(value = "-90.0", message = "纬度必须在 [-90,90] 内")
+    @DecimalMax(value = "90.0", message = "纬度必须在 [-90,90] 内")
     private Double latitude;
 
     private Long avgPrice;

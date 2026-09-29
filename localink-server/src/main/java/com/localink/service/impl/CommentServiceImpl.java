@@ -87,23 +87,29 @@ public class CommentServiceImpl implements CommentService {
             removed += children;
         }
         commentMapper.deleteById(commentId);
+        // 条件递减防负数（并发 create/delete 的计数窗口下宁可漂移不为负）
         postMapper.update(null, new LambdaUpdateWrapper<Post>()
                 .eq(Post::getId, comment.getPostId())
+                .ge(Post::getComments, removed)
                 .setSql("comments = comments - " + removed));
     }
 
     @Override
     public PageVO<CommentVO> pageOfPost(Long postId, long page, long size) {
-        Page<PostComment> top = commentMapper.selectPage(new Page<>(page, size),
+        long safePage = Math.max(1, page);
+        long safeSize = Math.min(Math.max(1, size), 50);
+        Page<PostComment> top = commentMapper.selectPage(new Page<>(safePage, safeSize),
                 new LambdaQueryWrapper<PostComment>()
                         .eq(PostComment::getPostId, postId)
                         .eq(PostComment::getParentId, 0)
                         .orderByDesc(PostComment::getCreateTime));
+        // 二级评论设上限：万级楼中楼不该随每页请求全量拉取（首屏截断，演进项是子分页）
         List<PostComment> children = commentMapper.selectList(
                 new LambdaQueryWrapper<PostComment>()
                         .eq(PostComment::getPostId, postId)
                         .ne(PostComment::getParentId, 0)
-                        .orderByAsc(PostComment::getCreateTime));
+                        .orderByAsc(PostComment::getCreateTime)
+                        .last("LIMIT 500"));
         Map<Long, List<PostComment>> byParent = children.stream()
                 .collect(Collectors.groupingBy(PostComment::getParentId));
 

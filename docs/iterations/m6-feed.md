@@ -22,7 +22,7 @@ lk_follow 反查""USER_FOLLOWEE 是关注流数据源"）在本期兑现。业�
 2. 大 V 判定：作者 fans ≥ 阈值（默认 1000，可配）不推送——写扩散上界被阈值封顶
 3. 收件箱截断：ZADD 后超上限（默认 1024，可配）popMin 至上限
 4. 滚动分页：`GET /api/feed?lastScore=&size=`，score 位账 `毫秒<<12 | postId 低 12 位`，
-   游标 exclusive（lastScore+1）翻页不重不漏；契约 `{records, nextCursor}`（ScrollVO）
+   游标 exclusive（实现为取更老一侧 `(-inf, lastScore-1]`，§6 排障已自纠）翻页不重不漏；契约 `{records, nextCursor}`（ScrollVO）
 5. 读端归并（推挽结合）：收件箱页 ∪ 我关注的大 V 帖页（DB 拉取+同公式换算 score），
    按 score 归并去重取前 size 条 → listOrdered 回填 → 按当前关注集合过滤（取关即时生效）
 6. 契约与文档：web-frontend.md §5 补滚动分页约定行；database.md §7 Feed 行旧编号校正
@@ -151,3 +151,5 @@ MySQL max_connections=151，殃及后续 shop 测试类建上下文。修复：�
 **M6-D 搜索**：ES 环境与 elasticsearch-java client 接入 + 发帖 → Kafka → 消费写 ES
 （复用 MQ 框架，同帖分区 key 防 FIFO 乱序）+ 搜索接口（全文检索/高亮/商户聚合筛选，
 search_after 深分页）。
+
+> **M8 回溯注记（2026-09-29，docs/VERIFICATION.md 审计 + m8-audit-fixes 修复）**：推/拉两路 score 口径原不一致（推=应用毫秒，拉=DB 秒对齐），

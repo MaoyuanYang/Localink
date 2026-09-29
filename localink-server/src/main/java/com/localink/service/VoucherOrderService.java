@@ -31,10 +31,11 @@ public interface VoucherOrderService {
      * 执行失败落回滚失败表（M5.2 补偿钩子）。
      *
      * @param traceId 资格生命周期 ID（与扣减流水同源；可空=只退资格不翻流水）
-     * @param source  来源组件（REQUEST_SEND / CONSUME_EXHAUSTED / STALE_DROP）
+     * @param source  来源组件（REQUEST_SEND / CONSUME_EXHAUSTED / STALE_DROP / ORDER_CLOSE / RECONCILE / RETRY）
+     * @return true = 已收敛（回滚完成或判定无需补偿）；false = 失败并已落失败表（对账重试据此保留原行累加次数）
      */
-    void rollbackSeckillQualification(Long voucherId, Long userId, Long orderId, Long traceId,
-                                      String source, String detail);
+    boolean rollbackSeckillQualification(Long voucherId, Long userId, Long orderId, Long traceId,
+                                         String source, String detail);
 
     /**
      * 订单是否已落库（超龄丢弃/耗尽回滚前的源真相判据——幂等标记允许写失败降级，不可作判据）。
