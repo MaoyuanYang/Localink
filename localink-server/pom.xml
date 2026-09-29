@@ -95,6 +95,18 @@
                     </execution>
                 </executions>
             </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <systemPropertyVariables>
+                        <!-- M7-A：yml 压测池 30+30 在多测试上下文切换峰值下会挤爆 MySQL max_connections=151，
+                             测试固定回历史基线 10（系统属性优先级高于 application.yml，只影响测试 JVM） -->
+                        <localink.sharding.primary-pool.maximum-pool-size>10</localink.sharding.primary-pool.maximum-pool-size>
+                        <localink.sharding.datasources.ds_1.maximum-pool-size>10</localink.sharding.datasources.ds_1.maximum-pool-size>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 </project>

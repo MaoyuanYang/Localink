@@ -27,6 +27,12 @@ public class ShardingProperties {
     private Map<String, DataSourceConfig> datasources = new LinkedHashMap<>();
 
     /**
+     * ds_0 连接池参数（M7-A 透出：此前池大小在 Builder 里硬编码 10——yml 的 spring.datasource.hikari.*
+     * 在 sharding 接管时不生效，那组配置只属于 enabled=false 的单库直连分支，两轨值保持一致即可）。
+     */
+    private DataSourceConfig primaryPool = new DataSourceConfig();
+
+    /**
      * 打印分片路由 SQL（排障开关）。
      */
     private boolean sqlShow = false;

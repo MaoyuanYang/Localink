@@ -1,5 +1,10 @@
 server:
   port: 8086
+  tomcat:
+    # M7-A 调优：基线 400 并发冲刺 94 个 accept 拒连（默认 accept-count=100）——加大 backlog 吸收突发建连。
+    # threads.max 实验后维持默认 200：调到 400 时缓存命中路径 +74%（8146 QPS）但拒绝路径调度风暴 -64%（3722→1329），
+    # CPU 饱和场景线程翻倍是负优化，两场景权衡后保 200（详见任务卡 m7-load-test.md 调优对照表）
+    accept-count: 1000
 
 
 spring:
@@ -41,6 +46,8 @@ spring:
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
     listener:
       ack-mode: manual_immediate
+      # M7-A 调优：对齐 seckill-order 3 分区（默认 1 线程消费，峰值排水慢；分区少的 topic 多余线程闲置无害）
+      concurrency: 3
 
 mybatis-plus:
   global-config:
@@ -102,11 +109,16 @@ localink:
             threshold: 3
   sharding:
     sql-show: false
+    # M7-A 调优：基线 400 并发申请令牌时 Hikari 爆池（total=10, waiting=122, 3s 超时→500）
+    primary-pool:
+      maximum-pool-size: 30
+      connection-timeout: 3000
     datasources:
       ds_1:
-        url: jdbc:mysql://localhost:3306/localink_1?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+        url: jdbc:mysql://localhost:3306/localink_1?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
         username: root
         password: localink123
+        maximum-pool-size: 30
   reconcile:
     enabled: true
     interval-ms: 300000

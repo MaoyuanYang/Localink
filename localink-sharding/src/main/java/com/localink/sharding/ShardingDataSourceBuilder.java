@@ -34,10 +34,11 @@ public final class ShardingDataSourceBuilder {
     public static DataSource build(DataSourceProperties primary, ShardingProperties properties)
             throws SQLException {
         Map<String, DataSource> dataSourceMap = new LinkedHashMap<>();
-        dataSourceMap.put(DEFAULT_DS, hikari(primary.getUrl(), primary.getUsername(),
-                primary.getPassword(), 10, 3000));
+        ShardingProperties.DataSourceConfig primaryPool = properties.getPrimaryPool();
+        dataSourceMap.put(DEFAULT_DS, hikari(DEFAULT_DS, primary.getUrl(), primary.getUsername(),
+                primary.getPassword(), primaryPool.getMaximumPoolSize(), primaryPool.getConnectionTimeout()));
         properties.getDatasources().forEach((name, config) -> dataSourceMap.put(name,
-                hikari(config.getUrl(), config.getUsername(), config.getPassword(),
+                hikari(name, config.getUrl(), config.getUsername(), config.getPassword(),
                         config.getMaximumPoolSize(), config.getConnectionTimeout())));
 
         List<RuleConfiguration> rules = List.of(shardingRule(), singleRule());
@@ -97,7 +98,7 @@ public final class ShardingDataSourceBuilder {
         return rule;
     }
 
-    private static DataSource hikari(String url, String username, String password,
+    private static DataSource hikari(String poolName, String url, String username, String password,
                                      int poolSize, long timeout) {
         HikariConfig config = new HikariConfig();
         config.setJdbcUrl(url);
@@ -105,7 +106,7 @@ public final class ShardingDataSourceBuilder {
         config.setPassword(password);
         config.setMaximumPoolSize(poolSize);
         config.setConnectionTimeout(timeout);
-        config.setPoolName("sharding-ds");
+        config.setPoolName("sharding-" + poolName);
         return new HikariDataSource(config);
     }
 }
