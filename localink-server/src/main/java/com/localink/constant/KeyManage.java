@@ -8,6 +8,10 @@ import java.time.Duration;
 /**
  * 业务 Redis Key 唯一登记处：模板 + 默认 TTL + 语义说明（枚举即文档）。
  * 新增 key 只允许在此登记，经 KeyBuilder 生成，禁止散落硬编码。
+ *
+ * <p>M8 治理例外（经审计登记）：ReconciliationJob 对流水的 SCAN/entries 逐键遍历属治理型只读
+ * 访问（key 来自 SCAN 结果而非模板参数，无法构造 KeyBuild），保留 StringRedisTemplate 直用；
+ * 其余业务读写一律走 RedisCache 门面（SeckillNoticeConsumer 的 SETNX 已于 M8 回归门面并带 TTL）。</p>
  */
 @Getter
 public enum KeyManage implements KeyTemplate {

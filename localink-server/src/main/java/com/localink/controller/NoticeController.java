@@ -25,6 +25,10 @@ public class NoticeController {
 
     @GetMapping
     public Result<List<String>> myNotices() {
+        if (UserHolder.get() == null) {
+            throw new com.localink.common.exception.LocalinkException(
+                    com.localink.common.code.BaseCode.UNAUTHORIZED);
+        }
         Long userId = UserHolder.get().getId();
         return Result.ok(List.copyOf(redisCache.zsets().reverseRange(
                 keyBuilder.build(KeyManage.USER_NOTICE, userId), 0, 9, String.class)));

@@ -26,7 +26,9 @@ public class ShopBloomFilterInitializer implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        List<Shop> shops = shopMapper.selectList(null);
+        List<Shop> shops = shopMapper.selectList(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Shop>()
+                        .select(Shop::getId));
         shops.forEach(shop -> bloomFilterRegistry.add(BloomFilterAlias.SHOP, String.valueOf(shop.getId())));
         log.info("商户布隆过滤器灌入完成, count={}", shops.size());
     }

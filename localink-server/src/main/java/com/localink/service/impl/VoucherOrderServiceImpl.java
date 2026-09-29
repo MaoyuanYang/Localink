@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.localink.cache.RedisCache;
 import com.localink.common.code.BaseCode;
+import com.localink.common.metrics.MetricsPort;
 import com.localink.common.exception.LocalinkException;
 import com.localink.entity.SeckillVoucher;
 import com.localink.entity.Voucher;
@@ -72,6 +73,7 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
     private final RedisScript<String> seckillDeductScript;
     private final RedisScript<String> seckillRollbackScript;
     private final MessageProducer messageProducer;
+    private final org.springframework.beans.factory.ObjectProvider<MetricsPort> metricsPort;
 
     @org.springframework.beans.factory.annotation.Value("${localink.order.close-delay:15m}")
     private java.time.Duration orderCloseDelay;
@@ -131,7 +133,12 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
             voucherReconcileLogMapper.insert(buildDeductLog(message, messageId));
             orderRouteMapper.insert(buildRoute(message));
         } catch (DuplicateKeyException e) {
-            log.info("唯一索引拦截重复建单（守卫与插入间隙的竞态）, orderId={}", message.orderId());
+            // 撞唯一索引 = 该资格已有建单（同 orderId 重投，或回流发券撞用户活跃单）。
+            // deductStock 先于 insert 执行，若直接 return 提交事务，先扣的 DB 库存即成幻影扣减
+            // （少卖且对账不可见）——同事务回补，净效果为零。
+            seckillVoucherMapper.restoreStock(message.voucherId());
+            log.info("唯一索引拦截重复建单, 已回补 DB 库存, orderId={}, voucherId={}",
+                    message.orderId(), message.voucherId());
             return;
         }
         // M5-C：店铺每日 Top 买家记账（按日 ZSet，ZINCRBY 幂等口径=单数自然累计）
@@ -180,10 +187,12 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
      * 超龄丢弃（beforeConsume）三处共用。逆增量 Lua 幂等可重试并翻 Redis 流水为恢复态；
      * 成功后落 DB 恢复流水行（business_type 按 source 归类）。Lua 或落行失败落 lk_rollback_failure_log
      * 供 M5.2 补偿告警——重试触发时 Lua 返回"无需补偿"即安全收敛。
+     *
+     * @return true = 已收敛（回滚完成或判定无需补偿）；false = 失败并已落失败表
      */
     @Override
-    public void rollbackSeckillQualification(Long voucherId, Long userId, Long orderId, Long traceId,
-                                              String source, String detail) {
+    public boolean rollbackSeckillQualification(Long voucherId, Long userId, Long orderId, Long traceId,
+                                                String source, String detail) {
         try {
             String result = redisCache.scripts().execute(seckillRollbackScript,
                     List.of(seckillStockCache.stockKey(voucherId), seckillStockCache.orderUsersKey(voucherId),
@@ -196,11 +205,12 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
             if (!result.startsWith(ROLLBACK_DONE_PREFIX)) {
                 log.info("回滚无需补偿（用户不在已购集合）, voucherId={}, userId={}, source={}",
                         voucherId, userId, source);
-                return;
+                return true;
             }
             String[] parts = result.split("\\|");
             voucherReconcileLogMapper.insert(buildRestoreLog(voucherId, userId, orderId, traceId,
                     source, detail, Integer.parseInt(parts[1]), Integer.parseInt(parts[2])));
+            return true;
         } catch (Exception e) {
             log.error("秒杀 Redis 回滚失败, 已落失败表待补偿, voucherId={}, userId={}, source={}",
                     voucherId, userId, source, e);
@@ -213,6 +223,9 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
             failureLog.setSource(source);
             failureLog.setDetail(detail + " | rollback error: " + e.getMessage());
             rollbackFailureLogMapper.insert(failureLog);
+            metricsPort.getIfAvailable(() -> MetricsPort.NOOP)
+                    .increment("localink.rollback.failure", "source", source);
+            return false;
         }
     }
 
@@ -223,10 +236,12 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
 
     /**
      * M5-B 超时关单：条件关单（affected=0 即已处置，直接跳过——重投/多投/空转任务的幂等闸门）
-     * → DB 库存逆增量回补 → 复用统一回滚退 Redis 资格（库存+1/出集合/流水翻恢复+恢复行）。
-     * Redis 回滚失败由统一入口落失败表（M5-A 对账重试收敛）——关单链路的兜底闭环复用自既有体系。
+     * 与 DB 库存逆增量回补同事务落定（中途崩溃整体回滚，重投可安全重试）；
+     * 提交后再退 Redis 资格（库存+1/出集合/流水翻恢复+恢复行）与回流发券——提交后崩溃的
+     * Redis 侧窗口由 M5-A 对账"终态未恢复"裁决兜底。Redis 回滚失败由统一入口落失败表。
      */
     @Override
+    @Transactional
     public boolean closeOrderIfExpired(Long orderId) {
         VoucherOrder order = voucherOrderMapper.selectById(orderId);
         if (order == null) {
@@ -239,9 +254,13 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
         }
         seckillVoucherMapper.restoreStock(order.getVoucherId());
         Long traceId = resolveTraceId(orderId);
-        rollbackSeckillQualification(order.getVoucherId(), order.getUserId(), orderId, traceId,
-                "ORDER_CLOSE", "order expired and closed by delay task");
-        subscribeService.tryGrantEarliest(order.getVoucherId());
+        Long voucherId = order.getVoucherId();
+        Long userId = order.getUserId();
+        TxCallbacks.afterCommit(() -> {
+            rollbackSeckillQualification(voucherId, userId, orderId, traceId,
+                    "ORDER_CLOSE", "order expired and closed by delay task");
+            subscribeService.tryGrantEarliest(voucherId);
+        });
         return true;
     }
 

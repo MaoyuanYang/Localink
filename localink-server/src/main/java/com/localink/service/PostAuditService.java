@@ -13,4 +13,9 @@ public interface PostAuditService {
      *         （帖不存在/已驳回——重复消息幂等）
      */
     boolean rejectIfRisky(Long postId);
+
+    /**
+     * 强制驳回（消费重试耗尽兜底，fail-closed）：audit=1 即驳回并清理派生视图。
+     */
+    void forceReject(Long postId);
 }

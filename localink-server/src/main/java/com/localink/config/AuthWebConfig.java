@@ -1,5 +1,6 @@
 package com.localink.config;
 
+import com.localink.framework.auth.AdminGuardInterceptor;
 import com.localink.framework.auth.LoginInterceptor;
 import com.localink.framework.auth.TokenRefreshInterceptor;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +14,7 @@ public class AuthWebConfig implements WebMvcConfigurer {
 
     private final TokenRefreshInterceptor tokenRefreshInterceptor;
     private final LoginInterceptor loginInterceptor;
+    private final AdminGuardInterceptor adminGuardInterceptor;
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
@@ -23,5 +25,8 @@ public class AuthWebConfig implements WebMvcConfigurer {
                 .addPathPatterns("/api/**")
                 .excludePathPatterns("/api/user/login", "/api/sms/**")
                 .order(1);
+        registry.addInterceptor(adminGuardInterceptor)
+                .addPathPatterns("/api/**")
+                .order(2);
     }
 }

@@ -23,7 +23,8 @@ public class PostAuditConsumer extends AbstractKafkaConsumer<PostAuditMessage> {
 
     @KafkaListener(
             topics = MqTopics.POST_AUDIT,
-            groupId = "localink-server-post-audit")
+            groupId = "localink-server-post-audit",
+            containerFactory = "postAuditContainerFactory")
     void onMessage(String value, Acknowledgment ack) {
         dispatch(value, ack);
     }

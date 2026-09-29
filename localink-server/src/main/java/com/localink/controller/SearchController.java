@@ -25,6 +25,13 @@ public class SearchController {
                                        @RequestParam(defaultValue = "relevance") String sort,
                                        @RequestParam(required = false) String searchAfter,
                                        @RequestParam(defaultValue = "10") int size) {
-        return Result.ok(postSearchService.search(keyword, shopId, sort, searchAfter, size));
+        // 参数钳制：关键词长度与页大小封顶（ES 深分页由 search_after 承担，size 只服务首屏）
+        String kw = keyword == null ? "" : keyword.trim();
+        if (kw.isEmpty() || kw.length() > 64) {
+            throw new com.localink.common.exception.LocalinkException(
+                    com.localink.common.code.BaseCode.PARAM_ERROR, "关键词长度须在 1~64 字符内");
+        }
+        int safeSize = Math.min(Math.max(1, size), 50);
+        return Result.ok(postSearchService.search(kw, shopId, sort, searchAfter, safeSize));
     }
 }

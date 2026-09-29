@@ -45,6 +45,7 @@ public class VoucherServiceImpl implements VoucherService {
 
     @Override
     public String create(VoucherDTO dto) {
+        requireValueOrder(dto.getPayValue(), dto.getActualValue());
         Voucher voucher = new Voucher();
         BeanUtils.copyProperties(dto, voucher, "id");
         voucher.setType(TYPE_NORMAL);
@@ -61,6 +62,7 @@ public class VoucherServiceImpl implements VoucherService {
             throw new LocalinkException(BaseCode.PARAM_ERROR, "更新操作缺少 id");
         }
         requireExists(dto.getId());
+        requireValueOrder(dto.getPayValue(), dto.getActualValue());
         Voucher voucher = new Voucher();
         BeanUtils.copyProperties(dto, voucher);
         voucherMapper.updateById(voucher);
@@ -87,6 +89,15 @@ public class VoucherServiceImpl implements VoucherService {
         order.setReconciliationStatus(RECONCILIATION_PENDING);
         voucherOrderMapper.insert(order);
         return String.valueOf(order.getId());
+    }
+
+    /**
+     * 支付金额必须小于抵扣金额——负价值券（支付 100 抵 1）没有业务意义且伤运营口径。
+     */
+    private void requireValueOrder(Long payValue, Long actualValue) {
+        if (payValue != null && actualValue != null && payValue >= actualValue) {
+            throw new LocalinkException(BaseCode.PARAM_ERROR, "支付金额必须小于抵扣金额");
+        }
     }
 
     private Voucher requireExists(Long id) {

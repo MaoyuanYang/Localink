@@ -1,6 +1,7 @@
 package com.localink.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.localink.framework.auth.AdminOnly;
 import com.localink.api.dto.ShopDTO;
 import com.localink.api.vo.ShopVO;
 import com.localink.api.vo.ShopNearbyVO;
@@ -37,17 +38,20 @@ public class ShopController {
         return Result.ok(shopService.page(typeId, page, size));
     }
 
+    @AdminOnly
     @PostMapping
     public Result<String> create(@Validated @RequestBody ShopDTO dto) {
         return Result.ok(shopService.create(dto));
     }
 
+    @AdminOnly
     @PutMapping
     public Result<Void> update(@Validated @RequestBody ShopDTO dto) {
         shopService.update(dto);
         return Result.ok();
     }
 
+    @AdminOnly
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {
         shopService.delete(id);

@@ -105,9 +105,32 @@ public class FollowServiceImpl implements FollowService {
                 keyBuilder.build(KeyManage.USER_FOLLOWEE, me.getId()),
                 keyBuilder.build(KeyManage.USER_FOLLOWEE, targetUserId), String.class);
         if (common.isEmpty()) {
-            return List.of();
+            // Redis 丢失兜底（B-8）：双侧 DB 事实源内存交集 + 写穿回缓存（SINTER 对缺失 key
+            // 与空集同形，无法区分"没有交集"与"缓存丢失"，空结果一律走 DB 复核）
+            Set<Long> mine = dbFollowees(me.getId());
+            Set<Long> theirs = dbFollowees(targetUserId);
+            mine.retainAll(theirs);
+            if (mine.isEmpty()) {
+                return List.of();
+            }
+            return toBriefVos(List.copyOf(mine));
         }
         return toBriefVos(common.stream().map(Long::valueOf).toList());
+    }
+
+    /**
+     * DB 事实源回查关注集并写穿回 Redis（B-8 兜底路径专用）。
+     */
+    private Set<Long> dbFollowees(Long userId) {
+        Set<Long> ids = followMapper.selectList(new LambdaQueryWrapper<Follow>()
+                        .eq(Follow::getUserId, userId)).stream()
+                .map(Follow::getFollowUserId)
+                .collect(java.util.stream.Collectors.toSet());
+        if (!ids.isEmpty()) {
+            redisCache.sets().add(keyBuilder.build(KeyManage.USER_FOLLOWEE, userId),
+                    ids.stream().map(String::valueOf).toArray());
+        }
+        return ids;
     }
 
     private List<UserBriefVO> toBriefVos(List<Long> userIds) {

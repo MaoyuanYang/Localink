@@ -9,6 +9,8 @@ import com.localink.service.SignService;
 import com.localink.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.validation.annotation.Validated;
+import com.localink.framework.auth.TokenRefreshInterceptor;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -26,6 +28,13 @@ public class UserController {
     @PostMapping("/login")
     public Result<String> login(@Validated @RequestBody UserLoginDTO dto) {
         return Result.ok(userService.login(dto.getPhone(), dto.getCode()));
+    }
+
+    @DeleteMapping("/logout")
+    public Result<Void> logout(
+            @org.springframework.web.bind.annotation.RequestHeader(TokenRefreshInterceptor.AUTH_HEADER) String token) {
+        userService.logout(token);
+        return Result.ok();
     }
 
     @GetMapping("/me")

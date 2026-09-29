@@ -44,8 +44,8 @@ public class SeckillTokenService {
             throw new LocalinkException(BaseCode.NOT_FOUND, "秒杀券不存在或不可抢");
         }
         String token = UUID.randomUUID().toString();
-        redisCache.strings().set(keyBuilder.build(KeyManage.SECKILL_TOKEN, voucherId, userId), token);
-        redisCache.expire(keyBuilder.build(KeyManage.SECKILL_TOKEN, voucherId, userId),
+        // SET+EX 单命令原子写入：两步写法中断会产生无 TTL 的"永久令牌"
+        redisCache.strings().set(keyBuilder.build(KeyManage.SECKILL_TOKEN, voucherId, userId), token,
                 Duration.ofSeconds(TOKEN_TTL_SECONDS));
         return token;
     }

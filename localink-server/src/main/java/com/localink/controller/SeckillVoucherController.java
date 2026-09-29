@@ -1,6 +1,7 @@
 package com.localink.controller;
 
 import com.localink.api.dto.SeckillVoucherDTO;
+import com.localink.framework.auth.AdminOnly;
 import com.localink.api.vo.SeckillVoucherVO;
 import com.localink.common.result.Result;
 import com.localink.framework.seckill.SeckillTokenService;
@@ -33,17 +34,20 @@ public class SeckillVoucherController {
 
     private final SeckillTokenService seckillTokenService;
 
+    @AdminOnly
     @PostMapping
     public Result<String> create(@Validated @RequestBody SeckillVoucherDTO dto) {
         return Result.ok(seckillVoucherService.create(dto));
     }
 
+    @AdminOnly
     @PutMapping
     public Result<Void> update(@Validated @RequestBody SeckillVoucherDTO dto) {
         seckillVoucherService.update(dto);
         return Result.ok();
     }
 
+    @AdminOnly
     @DeleteMapping("/{voucherId}")
     public Result<Void> delete(@PathVariable Long voucherId) {
         seckillVoucherService.delete(voucherId);

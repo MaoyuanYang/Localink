@@ -55,8 +55,13 @@ public class LocalStorageService implements StorageService {
         if (url == null || !url.startsWith(properties.getUrlPrefix() + "/")) {
             return;
         }
+        Path base = Paths.get(properties.getDir()).toAbsolutePath().normalize();
         Path target = Paths.get(properties.getDir(),
-                url.substring(properties.getUrlPrefix().length() + 1));
+                url.substring(properties.getUrlPrefix().length() + 1)).toAbsolutePath().normalize();
+        // 路径穿越防线：normalize 后必须仍在存储目录内（当前 delete 无用户直连调用面，防御性封死）
+        if (!target.startsWith(base)) {
+            throw new LocalinkException(BaseCode.PARAM_ERROR, "非法文件路径");
+        }
         try {
             Files.deleteIfExists(target);
         } catch (IOException e) {

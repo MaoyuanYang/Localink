@@ -1,6 +1,6 @@
 # Localink
 
-![Java](https://img.shields.io/badge/Java-17-ED8B00?logo=openjdk&logoColor=white) ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.4-6DB33F?logo=springboot&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8-4479A1?logo=mysql&logoColor=white) ![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white) ![Kafka](https://img.shields.io/badge/Kafka-3.9-231F20?logo=apachekafka&logoColor=white) ![Elasticsearch](https://img.shields.io/badge/Elasticsearch-8.15-343741?logo=elasticsearch&logoColor=white) ![Tests](https://img.shields.io/badge/tests-287%2F287-brightgreen) ![Modules](https://img.shields.io/badge/starters-8%20built-blue)
+![Java](https://img.shields.io/badge/Java-17-ED8B00?logo=openjdk&logoColor=white) ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.4-6DB33F?logo=springboot&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-8-4479A1?logo=mysql&logoColor=white) ![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white) ![Kafka](https://img.shields.io/badge/Kafka-3.9-231F20?logo=apachekafka&logoColor=white) ![Elasticsearch](https://img.shields.io/badge/Elasticsearch-8.15-343741?logo=elasticsearch&logoColor=white) ![Tests](https://img.shields.io/badge/tests-296%2F296-brightgreen) ![Modules](https://img.shields.io/badge/starters-8%20built-blue)
 
 本地生活社区平台 = **商户优惠秒杀**（高并发工程能力）+ **UGC 社区**（业务差异化）。
 
@@ -104,6 +104,6 @@ curl http://localhost:8086/ping   # -> pong
 - **M4 数据层扩展**：自研雪花（时钟回拨分档）+ Redis 轮转机器位 → ShardingSphere 5.5.1 双库分片（库 user_id%/表 voucher_id%）+ 订单路由表
 - **M5 一致性闭环**：对账体系（Redis 流水 vs DB 单向比对、差异补偿复用统一回滚、终态未恢复裁决关单）→ 延迟队列与关单（StringCodec 信封重投、条件关单闸门、超时 15m）→ 通知与运营统计（开抢前 2min 预通知圈名单群发、订阅 popMin 自动发券、Top 买家按日 ZINCRBY）
 
-当前测试基线 **287/287**（分模块 cache 52 / lock 9 / idempotent 6 / ratelimit 16 / mq 4 / delay 3 / id 9 / search 1 / server 187）。**M6 社区扩展六主题全部收官**：A 内容基础、B 互动关系、C Feed 流、D 搜索、E 热点统计、F 风控与特色（DFA 两级审核+BitMap 签到+GEO 附近商户，m2-1 预留的 Redis 结构扩组点全部兑现）。**M7 收尾两主题收官**：M7-A 全链路压测与调优（结果见上方专章）+ M7-B 交付与面试弹药（架构文档 v2.0 / 部署手册 / 30 道自测题）。**后端主线 M0~M7 全部完成**；剩余工作：Web 前端线（W0~W4，独立推进）。
+当前测试基线 **296/296**（分模块 cache 52 / lock 9 / idempotent 6 / ratelimit 16 / mq 4 / delay 3 / id 9 / search 1 / server 196）。**M6 社区扩展六主题全部收官**：A 内容基础、B 互动关系、C Feed 流、D 搜索、E 热点统计、F 风控与特色（DFA 两级审核+BitMap 签到+GEO 附近商户，m2-1 预留的 Redis 结构扩组点全部兑现）。**M7 收尾两主题收官**：M7-A 全链路压测与调优（结果见上方专章）+ M7-B 交付与面试弹药（架构文档 v2.0 / 部署手册 / 30 道自测题）。**后端主线 M0~M7 全部完成**；**M8 全量审计与修复**收官（project-verify 五维审计 23 主题全 Verified + 7 项 P1/19 项 P2 修复，报告 [docs/VERIFICATION.md](docs/VERIFICATION.md)、任务卡 [docs/iterations/m8-audit-fixes.md](docs/iterations/m8-audit-fixes.md)）；剩余工作：Web 前端线（W0~W4，独立推进）。
 
 完整进度见 [docs/roadmap.md](docs/roadmap.md)。

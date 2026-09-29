@@ -31,7 +31,7 @@
 | 消息队列 | Kafka | 3.x |
 | 分库分表 | ShardingSphere-JDBC | 5.5.1（M4.4 由 5.3.2 升级：snakeyaml 2.x 兼容） |
 | 搜索 | Elasticsearch（M6 引入） | 8.x |
-| 工具 | Lombok / Hutool / fastjson2 / Knife4j | — |
+| 工具 | Lombok / Hutool / fastjson2（Knife4j 仅在父 POM 做版本管理，未实际引入） | — |
 | 根包名 | `com.localink` | — |
 | 前端（localink-web/） | React + TypeScript + Vite + Ant Design + Zustand + Axios | 18 / 6 / 5.x |
 
@@ -96,4 +96,5 @@ docs/
 - JDK 21（编译目标 17）；构建一律使用 Maven Wrapper：`.\mvnw.cmd`
 - 中间件：MySQL 8 / Redis / Kafka / ES 的安装与验证见 `docs/middleware-setup.md`（`docker compose up -d mysql redis kafka`）
 - 全量构建：`.\mvnw.cmd clean package "-DskipTests"`（PowerShell 中 `-D` 参数必须加引号）
+- **全量测试必须串行、独占环境执行**：并发 Maven 构建/多 JVM 会互相污染 classpath 与 MySQL 连接池（M7-A 排障 7 与 M8 审计实录均复现；无 `clean` 时 surefire 报告还会混入上一轮残留）
 - 启动服务：`java -jar localink-server/target/localink-server-0.0.1-SNAPSHOT.jar`（端口 8086，`GET /ping` 冒烟）

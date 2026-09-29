@@ -16,9 +16,10 @@ spring:
       max-request-size: 10MB
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/localink?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-    username: root
-    password: localink123
+    # 密码经环境变量外置（默认值仅供本机演示环境直跑，生产必须注入真实凭据）
+    url: ${LOCALINK_DB_URL:jdbc:mysql://localhost:3306/localink?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true}
+    username: ${LOCALINK_DB_USER:root}
+    password: ${LOCALINK_DB_PASSWORD:localink123}
     hikari:
       maximum-pool-size: 10
       minimum-idle: 2
@@ -115,9 +116,9 @@ localink:
       connection-timeout: 3000
     datasources:
       ds_1:
-        url: jdbc:mysql://localhost:3306/localink_1?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-        username: root
-        password: localink123
+        url: ${LOCALINK_DB1_URL:jdbc:mysql://localhost:3306/localink_1?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true}
+        username: ${LOCALINK_DB_USER:root}
+        password: ${LOCALINK_DB_PASSWORD:localink123}
         maximum-pool-size: 30
   reconcile:
     enabled: true
@@ -148,3 +149,15 @@ localink:
     type: local
     dir: ./upload
     url-prefix: "/upload"
+  security:
+    # 管理端点权限闸门（A-7）：默认关闭=演示单机全放行；对外部署必须 true + 配置管理员手机号白名单
+    admin-guard:
+      enabled: false
+    admin-phones: ""
+
+# PRD §5 可观测：业务计数器（回滚失败/限流拒绝/对账补偿）暴露到 /actuator/metrics
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics

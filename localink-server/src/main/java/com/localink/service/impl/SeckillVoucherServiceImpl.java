@@ -40,6 +40,7 @@ public class SeckillVoucherServiceImpl implements SeckillVoucherService {
     @Transactional
     public String create(SeckillVoucherDTO dto) {
         requireTimeOrder(dto);
+        requireValueOrder(dto.getPayValue(), dto.getActualValue());
         Voucher voucher = new Voucher();
         voucher.setShopId(dto.getShopId());
         voucher.setTitle(dto.getTitle());
@@ -59,7 +60,11 @@ public class SeckillVoucherServiceImpl implements SeckillVoucherService {
         seckill.setBeginTime(dto.getBeginTime());
         seckill.setEndTime(dto.getEndTime());
         seckillVoucherMapper.insert(seckill);
-        seckillStockCache.warm(voucher.getId(), dto.getStock(), dto.getEndTime());
+        // 预热在提交后执行：事务内写 Redis，回滚会残留未提交值；afterCommit 同步执行，早于接口返回
+        Long voucherId = voucher.getId();
+        Integer stock = dto.getStock();
+        java.time.LocalDateTime endTime = dto.getEndTime();
+        TxCallbacks.afterCommit(() -> seckillStockCache.warm(voucherId, stock, endTime));
         offerPreNotice(voucher.getId(), dto.getBeginTime());
         return String.valueOf(voucher.getId());
     }
@@ -88,6 +93,7 @@ public class SeckillVoucherServiceImpl implements SeckillVoucherService {
             throw new LocalinkException(BaseCode.PARAM_ERROR, "更新操作缺少 id");
         }
         requireTimeOrder(dto);
+        requireValueOrder(dto.getPayValue(), dto.getActualValue());
         requireSeckill(dto.getId());
 
         Voucher voucherUpdate = new Voucher();
@@ -103,12 +109,28 @@ public class SeckillVoucherServiceImpl implements SeckillVoucherService {
 
         SeckillVoucher seckill = seckillVoucherMapper.selectOne(
                 new LambdaQueryWrapper<SeckillVoucher>().eq(SeckillVoucher::getVoucherId, dto.getId()));
+        if (seckill == null) {
+            throw new LocalinkException(BaseCode.NOT_FOUND, "秒杀券库存信息不存在");
+        }
+        // 活动进行中禁止修改库存：warm 是覆盖式重灌，进行中改值会把已售差额一并抬回
+        // （相对初始库存的超卖 + 覆盖在途扣减制造的 Redis/DB 漂移）
+        if (dto.getStock() != null && !dto.getStock().equals(seckill.getStock())) {
+            java.time.LocalDateTime now = java.time.LocalDateTime.now();
+            boolean started = seckill.getBeginTime() == null || !now.isBefore(seckill.getBeginTime());
+            boolean notEnded = seckill.getEndTime() == null || now.isBefore(seckill.getEndTime());
+            if (started && notEnded) {
+                throw new LocalinkException(BaseCode.PARAM_ERROR, "秒杀进行中不可修改库存（防覆盖式重灌放大可售量）");
+            }
+        }
         seckill.setStock(dto.getStock());
         seckill.setMinLevel(dto.getMinLevel());
         seckill.setBeginTime(dto.getBeginTime());
         seckill.setEndTime(dto.getEndTime());
         seckillVoucherMapper.updateById(seckill);
-        seckillStockCache.warm(dto.getId(), dto.getStock(), dto.getEndTime());
+        Long updateId = dto.getId();
+        Integer updateStock = dto.getStock();
+        java.time.LocalDateTime updateEnd = dto.getEndTime();
+        TxCallbacks.afterCommit(() -> seckillStockCache.warm(updateId, updateStock, updateEnd));
     }
 
     @Override
@@ -118,7 +140,7 @@ public class SeckillVoucherServiceImpl implements SeckillVoucherService {
         seckillVoucherMapper.delete(
                 new LambdaQueryWrapper<SeckillVoucher>().eq(SeckillVoucher::getVoucherId, voucherId));
         voucherMapper.deleteById(voucherId);
-        seckillStockCache.evict(voucherId);
+        TxCallbacks.afterCommit(() -> seckillStockCache.evict(voucherId));
     }
 
     @Override
@@ -153,6 +175,15 @@ public class SeckillVoucherServiceImpl implements SeckillVoucherService {
         if (dto.getBeginTime() != null && dto.getEndTime() != null
                 && !dto.getEndTime().isAfter(dto.getBeginTime())) {
             throw new LocalinkException(BaseCode.PARAM_ERROR, "结束时间必须晚于开抢时间");
+        }
+    }
+
+    /**
+     * 支付金额必须小于抵扣金额——负价值券（支付 100 抵 1）没有业务意义且伤运营口径。
+     */
+    private void requireValueOrder(Long payValue, Long actualValue) {
+        if (payValue != null && actualValue != null && payValue >= actualValue) {
+            throw new LocalinkException(BaseCode.PARAM_ERROR, "支付金额必须小于抵扣金额");
         }
     }
 

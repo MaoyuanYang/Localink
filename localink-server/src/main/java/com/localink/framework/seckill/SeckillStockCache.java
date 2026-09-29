@@ -30,8 +30,8 @@ public class SeckillStockCache {
             return;
         }
         KeyBuild stockKey = keyBuilder.build(KeyManage.SECKILL_STOCK, voucherId);
-        redisCache.strings().set(stockKey, String.valueOf(stock));
-        redisCache.expire(stockKey, ttlTo(endTime));
+        // SET+EX 单命令原子写入：两步写法（set 后 expire）中断会产生无 TTL 的常驻 key
+        redisCache.strings().set(stockKey, String.valueOf(stock), ttlTo(endTime));
     }
 
     /**

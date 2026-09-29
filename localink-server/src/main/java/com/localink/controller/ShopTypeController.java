@@ -1,6 +1,7 @@
 package com.localink.controller;
 
 import com.localink.api.dto.ShopTypeDTO;
+import com.localink.framework.auth.AdminOnly;
 import com.localink.api.vo.ShopTypeVO;
 import com.localink.common.result.Result;
 import com.localink.service.ShopTypeService;
@@ -29,17 +30,20 @@ public class ShopTypeController {
         return Result.ok(shopTypeService.list());
     }
 
+    @AdminOnly
     @PostMapping
     public Result<String> create(@Validated @RequestBody ShopTypeDTO dto) {
         return Result.ok(shopTypeService.create(dto));
     }
 
+    @AdminOnly
     @PutMapping
     public Result<Void> update(@Validated @RequestBody ShopTypeDTO dto) {
         shopTypeService.update(dto);
         return Result.ok();
     }
 
+    @AdminOnly
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {
         shopTypeService.delete(id);

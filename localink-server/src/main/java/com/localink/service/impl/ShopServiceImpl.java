@@ -172,26 +172,37 @@ public class ShopServiceImpl implements ShopService {
 
     @Override
     public Page<ShopVO> page(Long typeId, long page, long size) {
+        // 上限钳制：防 size=999999 一把拉全表
+        long safePage = Math.max(1, page);
+        long safeSize = Math.min(Math.max(1, size), 50);
         LambdaQueryWrapper<Shop> wrapper = new LambdaQueryWrapper<Shop>()
                 .eq(typeId != null, Shop::getTypeId, typeId)
                 .orderByAsc(Shop::getId);
-        Page<Shop> result = shopMapper.selectPage(new Page<>(page, size), wrapper);
+        Page<Shop> result = shopMapper.selectPage(new Page<>(safePage, safeSize), wrapper);
         Page<ShopVO> voPage = new Page<>(result.getCurrent(), result.getSize(), result.getTotal());
         voPage.setRecords(result.getRecords().stream().map(this::toVO).toList());
         return voPage;
     }
 
+    /**
+     * 布隆先入、DB 后写：布隆假阳性无害（空值缓存吸收），Redis 抖动时顶多留下一个多余 id；
+     * 反序（先插库后入布隆）时 Redis 抖动会让已建商户被布隆永久误拦（重启才恢复）。
+     * 事务包裹：GEO 写失败回滚 DB，脏坐标行无从落库（启动灌入不再被单行拖垮）。
+     */
     @Override
+    @org.springframework.transaction.annotation.Transactional
     public String create(ShopDTO dto) {
         Shop shop = new Shop();
         BeanUtils.copyProperties(dto, shop, "id");
-        shopMapper.insert(shop);
+        shop.setId(com.baomidou.mybatisplus.core.toolkit.IdWorker.getId());
         bloomFilterRegistry.add(BloomFilterAlias.SHOP, String.valueOf(shop.getId()));
+        shopMapper.insert(shop);
         addToGeo(shop);
         return String.valueOf(shop.getId());
     }
 
     @Override
+    @org.springframework.transaction.annotation.Transactional
     public void update(ShopDTO dto) {
         if (dto.getId() == null) {
             throw new LocalinkException(BaseCode.PARAM_ERROR, "更新操作缺少 id");
@@ -205,9 +216,12 @@ public class ShopServiceImpl implements ShopService {
         redisCache.delete(shopKey(dto.getId()));
         shopLocalCache.invalidate(localKey(dto.getId()));
         broadcastInvalidate(dto.getId());
+        // 延迟双删：杀掉"在途重建任务查到旧值又写回"的竞争窗口（重建读 DB 与本提交交错的毫秒级缝隙）
+        delayedDoubleDelete(dto.getId());
     }
 
     @Override
+    @org.springframework.transaction.annotation.Transactional
     public void delete(Long id) {
         requireExists(id);
         shopMapper.deleteById(id);
@@ -215,6 +229,16 @@ public class ShopServiceImpl implements ShopService {
         redisCache.delete(shopKey(id));
         shopLocalCache.invalidate(localKey(id));
         broadcastInvalidate(id);
+        delayedDoubleDelete(id);
+    }
+
+    /**
+     * 1 秒后对 Redis 再删一次：不占用重建线程池（CompletableFuture 延时调度器执行）。
+     */
+    private void delayedDoubleDelete(Long id) {
+        java.util.concurrent.CompletableFuture.runAsync(
+                () -> redisCache.delete(shopKey(id)),
+                java.util.concurrent.CompletableFuture.delayedExecutor(1, java.util.concurrent.TimeUnit.SECONDS));
     }
 
     @Override
@@ -247,6 +271,11 @@ public class ShopServiceImpl implements ShopService {
 
     private void addToGeo(Shop shop) {
         if (shop.getLongitude() != null && shop.getLatitude() != null) {
+            // 范围防线（DTO 校验之后的第二道闸）：越界坐标会让 GEOADD 报错，绝不让它走到这
+            if (shop.getLongitude() < -180.0 || shop.getLongitude() > 180.0
+                    || shop.getLatitude() < -90.0 || shop.getLatitude() > 90.0) {
+                throw new LocalinkException(BaseCode.PARAM_ERROR, "经纬度超出合法范围");
+            }
             redisCache.geos().add(keyBuilder.build(KeyManage.SHOP_GEO),
                     shop.getLongitude(), shop.getLatitude(), String.valueOf(shop.getId()));
         }

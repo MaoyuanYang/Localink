@@ -17,7 +17,6 @@ import com.localink.service.TopBuyerService;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -46,7 +45,6 @@ public class SeckillNoticeConsumer extends DelayQueueConsumer {
     private final TopBuyerService topBuyerService;
     private final RedisCache redisCache;
     private final KeyBuilder keyBuilder;
-    private final StringRedisTemplate redisTemplate;
     private final long expiredToleranceMinutes;
 
     public SeckillNoticeConsumer(RedissonClient redissonClient,
@@ -57,7 +55,6 @@ public class SeckillNoticeConsumer extends DelayQueueConsumer {
                                  TopBuyerService topBuyerService,
                                  RedisCache redisCache,
                                  KeyBuilder keyBuilder,
-                                 StringRedisTemplate redisTemplate,
                                  @Value("${localink.seckill.notice.expired-tolerance-minutes:5}") long expiredToleranceMinutes,
                                  @Value("${localink.delay.shards:2}") int shards) {
         super(redissonClient, delayQueuePublisher, DelayTopics.SECKILL_NOTICE, shards);
@@ -67,15 +64,15 @@ public class SeckillNoticeConsumer extends DelayQueueConsumer {
         this.topBuyerService = topBuyerService;
         this.redisCache = redisCache;
         this.keyBuilder = keyBuilder;
-        this.redisTemplate = redisTemplate;
         this.expiredToleranceMinutes = expiredToleranceMinutes;
     }
 
     @Override
     protected void doConsume(String payload) {
         Long voucherId = Long.valueOf(payload);
-        String sentKey = keyBuilder.build(KeyManage.NOTICE_SENT, voucherId).getKey();
-        if (!Boolean.TRUE.equals(redisTemplate.opsForValue().setIfAbsent(sentKey, "1"))) {
+        // SETNX 防重走门面原子 SET NX EX，TTL 取 KeyManage 登记（1 天）——防重标记不可常驻不过期
+        if (!redisCache.strings().setIfAbsent(keyBuilder.build(KeyManage.NOTICE_SENT, voucherId), "1",
+                KeyManage.NOTICE_SENT.getTtl())) {
             log.info("预通知已发过, 跳过重投, voucherId={}", voucherId);
             return;
         }

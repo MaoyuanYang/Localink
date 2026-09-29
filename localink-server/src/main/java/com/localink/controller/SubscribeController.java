@@ -41,6 +41,10 @@ public class SubscribeController {
 
     @GetMapping("/seckill-voucher/{voucherId}/subscribe")
     public Result<String> subscribeStatus(@PathVariable Long voucherId) {
+        if (UserHolder.get() == null) {
+            throw new com.localink.common.exception.LocalinkException(
+                    com.localink.common.code.BaseCode.UNAUTHORIZED);
+        }
         return Result.ok(subscribeService.status(voucherId, UserHolder.get().getId()));
     }
 

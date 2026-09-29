@@ -101,7 +101,18 @@ public class LikeServiceImpl implements LikeService {
         Set<ZSetEntry<String>> entries = redisCache.zsets().reverseRangeWithScore(
                 keyBuilder.build(KeyManage.POST_LIKE_TOP), 0, bounded - 1, String.class);
         if (entries.isEmpty()) {
-            return List.of();
+            // Redis 丢失兜底（B-8）：liked 冗余计数与事实表同事务，可作即时重算口径
+            List<com.localink.entity.Post> topPosts = postMapper.selectList(
+                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<com.localink.entity.Post>()
+                            .eq(com.localink.entity.Post::getAuditStatus, AUDIT_PASSED)
+                            .gt(com.localink.entity.Post::getLiked, 0)
+                            .orderByDesc(com.localink.entity.Post::getLiked)
+                            .orderByDesc(com.localink.entity.Post::getId)
+                            .last("LIMIT " + bounded));
+            if (topPosts.isEmpty()) {
+                return List.of();
+            }
+            return postService.listOrdered(topPosts.stream().map(com.localink.entity.Post::getId).toList());
         }
         List<Long> postIds = entries.stream().map(entry -> Long.valueOf(entry.value())).toList();
         return postService.listOrdered(postIds);

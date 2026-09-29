@@ -22,6 +22,9 @@ public class CacheRebuildExecutorConfig {
         executor.setKeepAliveSeconds(60);
         executor.setThreadNamePrefix("cache-rebuild-");
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        // 优雅收尾：停机时给排队中的重建任务最多 10s 跑完（任务丢失可自愈，不弃排队任务）
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(10);
         executor.initialize();
         return executor;
     }
