@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
+  <rect width="400" height="300" fill="#f0f2f5"/>
+  <g fill="#bfbfbf">
+    <path d="M80 130 L100 90 L300 90 L320 130 L320 220 L280 220 L280 160 L120 160 L120 220 L80 220 Z"/>
+    <rect x="160" y="180" width="80" height="40"/>
+  </g>
+  <text x="200" y="260" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#8c8c8c">暂无图片</text>
+</svg>
