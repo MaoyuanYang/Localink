@@ -36,7 +36,7 @@ localink                      # 父 POM，统一版本治理
 ├── localink-search-starter   # ES 搜索（M6 启用）
 └── localink-server           # 唯一可启动业务应用（端口 8086）
 
-localink-web/                 # Web 演示界面（规划中：React+TS，C端+/admin后台，W 线未启动——见 docs/web-frontend.md）
+localink-web/                 # Web 演示界面（React18+TS+Vite6+AntD5，C端+/admin后台；W0 骨架+账户商户闭环已落地——见 docs/web-frontend.md）
 ```
 
 ## 快速开始
@@ -90,7 +90,7 @@ curl http://localhost:8086/ping   # -> pong
 | [docs/roadmap.md](docs/roadmap.md) | 迭代路线图（勾选跟踪） |
 | [docs/middleware-setup.md](docs/middleware-setup.md) | 中间件安装与验证指引 |
 | [docs/interview-qa-30.md](docs/interview-qa-30.md) | 30 道核心自测题（含答题要点与出处） |
-| [docs/web-frontend.md](docs/web-frontend.md) | Web 前端设计（W 线，未启动） |
+| [docs/web-frontend.md](docs/web-frontend.md) | Web 前端设计（W 线，W0 已落地） |
 | [docs/iterations/](docs/iterations/) | 每个迭代的任务卡（设计取舍/验证记录/学习清单） |
 | [AGENTS.md](AGENTS.md) | 项目开发与协作最高规范 |
 
@@ -104,6 +104,6 @@ curl http://localhost:8086/ping   # -> pong
 - **M4 数据层扩展**：自研雪花（时钟回拨分档）+ Redis 轮转机器位 → ShardingSphere 5.5.1 双库分片（库 user_id%/表 voucher_id%）+ 订单路由表
 - **M5 一致性闭环**：对账体系（Redis 流水 vs DB 单向比对、差异补偿复用统一回滚、终态未恢复裁决关单）→ 延迟队列与关单（StringCodec 信封重投、条件关单闸门、超时 15m）→ 通知与运营统计（开抢前 2min 预通知圈名单群发、订阅 popMin 自动发券、Top 买家按日 ZINCRBY）
 
-当前测试基线 **296/296**（分模块 cache 52 / lock 9 / idempotent 6 / ratelimit 16 / mq 4 / delay 3 / id 9 / search 1 / server 196）。**M6 社区扩展六主题全部收官**：A 内容基础、B 互动关系、C Feed 流、D 搜索、E 热点统计、F 风控与特色（DFA 两级审核+BitMap 签到+GEO 附近商户，m2-1 预留的 Redis 结构扩组点全部兑现）。**M7 收尾两主题收官**：M7-A 全链路压测与调优（结果见上方专章）+ M7-B 交付与面试弹药（架构文档 v2.0 / 部署手册 / 30 道自测题）。**后端主线 M0~M7 全部完成**；**M8 全量审计与修复**收官（project-verify 五维审计 23 主题全 Verified + 7 项 P1/19 项 P2 修复，报告 [docs/VERIFICATION.md](docs/VERIFICATION.md)、任务卡 [docs/iterations/m8-audit-fixes.md](docs/iterations/m8-audit-fixes.md)）；剩余工作：Web 前端线（W0~W4，独立推进）。
+当前测试基线 **302/302**（分模块 cache 52 / lock 9 / idempotent 6 / ratelimit 16 / mq 4 / delay 3 / id 9 / search 1 / server 202）。**M6 社区扩展六主题全部收官**：A 内容基础、B 互动关系、C Feed 流、D 搜索、E 热点统计、F 风控与特色（DFA 两级审核+BitMap 签到+GEO 附近商户，m2-1 预留的 Redis 结构扩组点全部兑现）。**M7 收尾两主题收官**：M7-A 全链路压测与调优（结果见上方专章）+ M7-B 交付与面试弹药（架构文档 v2.0 / 部署手册 / 30 道自测题）。**后端主线 M0~M7 全部完成**；**M8 全量审计与修复**收官（project-verify 五维审计 23 主题全 Verified + 7 项 P1/19 项 P2 修复，报告 [docs/VERIFICATION.md](docs/VERIFICATION.md)、任务卡 [docs/iterations/m8-audit-fixes.md](docs/iterations/m8-audit-fixes.md)）。**Web 前端线进行中**：W0 工程骨架+账户商户闭环收官（Vite/React/TS/AntD 骨架、登录/商户/普通券闭环、dev 取码开关接口，真实联调冒烟通过，任务卡 [docs/iterations/w0-skeleton.md](docs/iterations/w0-skeleton.md)）；剩余 W1~W4。
 
 完整进度见 [docs/roadmap.md](docs/roadmap.md)。

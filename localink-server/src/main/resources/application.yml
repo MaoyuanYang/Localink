@@ -154,6 +154,11 @@ localink:
     admin-guard:
       enabled: false
     admin-phones: ""
+  # dev 验证码回查（W0）：默认关闭=接口不装配（404）；本地联调/演示用
+  # --localink.dev.sms-code-query.enabled=true 或 application-local.yml 开启，对外部署保持 false
+  dev:
+    sms-code-query:
+      enabled: false
 
 # PRD §5 可观测：业务计数器（回滚失败/限流拒绝/对账补偿）暴露到 /actuator/metrics
 management:
