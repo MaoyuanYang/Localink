@@ -99,10 +99,24 @@ docker exec localink-kafka bash -c "/opt/kafka/bin/kafka-consumer-groups.sh --bo
 | 启动报 `Too many connections`（MySQL 151） | 多实例/测试并存时连接超限；确认没有并行测试 JVM，重启 MySQL 释放残留 |
 | ES 连接失败 / ik 未生效 | 见 [middleware-setup.md](middleware-setup.md) §5 ik 手工补装与 §6 排查表 |
 | 管理端点越权（对外部署） | `application.yml` 置 `localink.security.admin-guard.enabled: true` 并配置 `admin-phones` 白名单（M8 起商户/券写端点支持 @AdminOnly 闸门，默认关闭=演示口径） |
+| dev 验证码回查接口（W0） | 默认关闭（Bean 不装配=404）。本地联调/演示需要前端自动取码时：启动参数加 `--localink.dev.sms-code-query.enabled=true`（或 application-local.yml 开启）。该接口等于"任意账号可登录"的后门，**对外部署必须保持 false** |
 | 端口 8086 占用 | `netstat -ano | findstr :8086` 找 PID 清理；smoke.ps1 已处理 javapath shim 子进程坑 |
 | 分片查询报错 | 检查 localink_1 是否已初始化（§3 步骤②遗漏是最常见原因） |
 | Docker Desktop 自动停止 | 重新 `Start-Process Docker Desktop` 后 `docker compose up -d`（容器随 daemon 自启） |
 
-## 10. 前端部署（待 W4）
+## 10. 前端部署
 
-Web 前端线（`localink-web/`，React 18 + Vite）尚未启动，nginx 部署与后端反代配置待 W4 主题落地后补充于此节。
+Web 前端线（`localink-web/`，React 18 + TS + Vite 6 + AntD 5）W0 起已启动。
+
+**本地开发模式（W0 口径）**：
+
+```powershell
+# 前置：后端已按 §4 启动（8086）
+cd localink-web
+npm install
+npm run dev        # 5173，dev proxy /api → http://localhost:8086，无 CORS 配置需求
+```
+
+登录页验证码：开发模式自动调 `GET /api/sms/code/dev` 回填（需上方 dev 开关开启，默认提示降级为 redis-cli 取码命令）。
+
+nginx 生产部署与后端反代配置待 W4 主题落地后补充于此节。
