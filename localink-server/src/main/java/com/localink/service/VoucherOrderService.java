@@ -1,8 +1,17 @@
 package com.localink.service;
 
+import com.localink.api.vo.VoucherOrderVO;
 import com.localink.mq.SeckillOrderMessage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 
 public interface VoucherOrderService {
+
+    /**
+     * 我的订单分页（W1）：按当前登录用户查全部类型订单（普通+秒杀），券名批量回填。
+     * 分片路由：user_id 命中库键（单库），voucher_id 不在条件则库内两表广播归并。
+     * GET 匿名可达（拦截器只拦非 GET），此处显式判登录。
+     */
+    Page<VoucherOrderVO> pageMyOrders(long page, long size);
 
     /**
      * 秒杀下单（异步版，令牌前置入口 M3.15）：一次性消费前置令牌 → 校验 → Lua 原子扣减+流水
