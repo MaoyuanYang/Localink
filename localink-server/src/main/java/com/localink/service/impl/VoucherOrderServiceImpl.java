@@ -2,6 +2,8 @@ package com.localink.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.IdWorker;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.localink.api.vo.VoucherOrderVO;
 import com.localink.cache.RedisCache;
 import com.localink.common.code.BaseCode;
 import com.localink.common.metrics.MetricsPort;
@@ -380,6 +382,46 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
         if (level == null || level < minLevel) {
             throw new LocalinkException(BaseCode.SECKILL_LEVEL_NOT_ENOUGH);
         }
+    }
+
+    @Override
+    public Page<VoucherOrderVO> pageMyOrders(long page, long size) {
+        var user = UserHolder.get();
+        if (user == null) {
+            throw new LocalinkException(BaseCode.UNAUTHORIZED);
+        }
+        long safePage = Math.max(1, page);
+        long safeSize = Math.min(Math.max(1, size), 50);
+        Page<VoucherOrder> raw = voucherOrderMapper.selectPage(
+                new Page<>(safePage, safeSize),
+                new LambdaQueryWrapper<VoucherOrder>()
+                        .eq(VoucherOrder::getUserId, user.getId())
+                        .orderByDesc(VoucherOrder::getId));
+        List<VoucherOrderVO> records = raw.getRecords().stream().map(o -> {
+            VoucherOrderVO vo = new VoucherOrderVO();
+            vo.setId(o.getId());
+            vo.setUserId(o.getUserId());
+            vo.setVoucherId(o.getVoucherId());
+            vo.setVoucherType(o.getVoucherType());
+            vo.setStatus(o.getStatus());
+            vo.setCreateTime(o.getCreateTime());
+            vo.setCloseTime(o.getCloseTime());
+            return vo;
+        }).toList();
+        fillVoucherTitles(records);
+        Page<VoucherOrderVO> result = new Page<>(raw.getCurrent(), raw.getSize(), raw.getTotal());
+        result.setRecords(records);
+        return result;
+    }
+
+    private void fillVoucherTitles(List<VoucherOrderVO> records) {
+        if (records.isEmpty()) {
+            return;
+        }
+        var titleById = voucherMapper.selectBatchIds(records.stream()
+                        .map(VoucherOrderVO::getVoucherId).distinct().toList()).stream()
+                .collect(java.util.stream.Collectors.toMap(Voucher::getId, Voucher::getTitle, (a, b) -> a));
+        records.forEach(vo -> vo.setTitle(titleById.get(vo.getVoucherId())));
     }
 
     /**
