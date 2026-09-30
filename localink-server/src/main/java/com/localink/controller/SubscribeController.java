@@ -53,4 +53,13 @@ public class SubscribeController {
                                                        @RequestParam(required = false) String date) {
         return Result.ok(topBuyerService.topBuyers(shopId, date, 10));
     }
+
+    /**
+     * 订阅运营统计（W2）：队列规模 + 状态分布 + 预通知标记 + 活动窗口。
+     */
+    @com.localink.framework.auth.AdminOnly
+    @GetMapping("/seckill-voucher/{voucherId}/subscribe-stats")
+    public Result<com.localink.api.vo.SubscribeStatsVO> subscribeStats(@PathVariable Long voucherId) {
+        return Result.ok(subscribeService.stats(voucherId));
+    }
 }

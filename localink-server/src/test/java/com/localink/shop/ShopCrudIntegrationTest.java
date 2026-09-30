@@ -72,6 +72,15 @@ class ShopCrudIntegrationTest {
     }
 
     @Test
+    void createWithoutImagesFallsBackToEmpty() {
+        ShopDTO dto = newDto();
+        dto.setImages(null);
+        Long id = Long.valueOf(shopService.create(dto));
+        createdIds.add(id);
+        assertEquals("", shopService.detail(id).getImages());
+    }
+
+    @Test
     void pageFiltersByTypeAndRespectsSize() {
         ShopDTO dto = newDto();
         Long id = Long.valueOf(shopService.create(dto));

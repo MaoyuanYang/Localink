@@ -1,9 +1,17 @@
 package com.localink.service;
 
+import com.localink.api.vo.SubscribeStatsVO;
+
 /**
  * 秒杀券订阅（M5-C）：售罄后订阅排队，订单回流（取消/超时关单）时自动发券给最早订阅者。
  */
 public interface SubscribeService {
+
+    /**
+     * 订阅运营统计（W2）：队列规模（ZCARD）+ 状态分布（SUBSCRIBED/GRANTED）+
+     * 预通知已发标记（notice:sent）+ 活动窗口回显。
+     */
+    SubscribeStatsVO stats(Long voucherId);
 
     /**
      * 订阅：进 ZSet 排队（score=订阅时刻）+ 状态置 SUBSCRIBED。
