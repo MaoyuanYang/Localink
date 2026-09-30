@@ -55,3 +55,29 @@ export interface VoucherVO {
   status: number
   createTime: string
 }
+
+export interface SeckillVoucherVO {
+  voucherId: string
+  shopId: string
+  title: string
+  subTitle: string
+  rules: string
+  payValue: number
+  actualValue: number
+  status: number
+  stock: number
+  minLevel: number
+  beginTime: string
+  endTime: string
+}
+
+export interface VoucherOrderVO {
+  id: string
+  userId: string
+  voucherId: string
+  voucherType: number
+  status: number
+  title: string | null
+  createTime: string
+  closeTime: string | null
+}

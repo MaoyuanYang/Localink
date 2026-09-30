@@ -2,9 +2,11 @@ import { Button, Card, Col, Descriptions, Empty, Image, List, Row, Skeleton, Tag
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { fetchShop } from '../api/shop'
+import { listSeckillVouchers } from '../api/seckill'
 import { claimVoucher, listVouchers } from '../api/voucher'
-import type { ShopVO, VoucherVO } from '../types/api'
+import type { SeckillVoucherVO, ShopVO, VoucherVO } from '../types/api'
 import { fenToYuan, scoreOf } from '../utils/format'
+import { phaseOf, PHASE_TAG } from '../utils/seckillPhase'
 
 export default function ShopDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -12,16 +14,18 @@ export default function ShopDetailPage() {
   const { message: messageApi } = App.useApp()
   const [shop, setShop] = useState<ShopVO | null>(null)
   const [vouchers, setVouchers] = useState<VoucherVO[]>([])
+  const [seckills, setSeckills] = useState<SeckillVoucherVO[]>([])
   const [loading, setLoading] = useState(true)
   const [claimingId, setClaimingId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!id) return
     setLoading(true)
-    Promise.all([fetchShop(id), listVouchers(id)])
-      .then(([s, v]) => {
+    Promise.all([fetchShop(id), listVouchers(id), listSeckillVouchers(id)])
+      .then(([s, v, sv]) => {
         setShop(s)
         setVouchers(v.filter((item) => item.type === 1))
+        setSeckills(sv)
       })
       .finally(() => setLoading(false))
   }, [id])
@@ -89,6 +93,38 @@ export default function ShopDetailPage() {
           </Descriptions>
         </Col>
       </Row>
+
+      {seckills.length > 0 && (
+        <>
+          <Typography.Title level={4} style={{ marginTop: 32 }}>
+            秒杀活动（{seckills.length}）
+          </Typography.Title>
+          <List
+            grid={{ gutter: 16, column: 2 }}
+            dataSource={seckills}
+            renderItem={(sv) => {
+              const tag = PHASE_TAG[phaseOf(sv, Date.now())]
+              return (
+                <Card
+                  size="small"
+                  hoverable
+                  title={sv.title}
+                  extra={<Tag color={tag.color}>{tag.text}</Tag>}
+                  onClick={() => navigate(`/seckill/${sv.voucherId}`)}
+                >
+                  <Typography.Paragraph style={{ marginBottom: 8 }}>
+                    ¥{fenToYuan(sv.payValue)} 抵 ¥{fenToYuan(sv.actualValue)} · 库存 {sv.stock}
+                    {sv.minLevel > 0 ? ` · 需 Lv.${sv.minLevel}` : ''}
+                  </Typography.Paragraph>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    {sv.beginTime} ~ {sv.endTime}
+                  </Typography.Text>
+                </Card>
+              )
+            }}
+          />
+        </>
+      )}
 
       <Typography.Title level={4} style={{ marginTop: 32 }}>
         门店优惠券（{vouchers.length}）
