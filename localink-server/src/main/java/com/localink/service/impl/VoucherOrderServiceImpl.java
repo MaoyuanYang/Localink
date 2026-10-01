@@ -390,28 +390,50 @@ public class VoucherOrderServiceImpl implements VoucherOrderService {
         if (user == null) {
             throw new LocalinkException(BaseCode.UNAUTHORIZED);
         }
-        long safePage = Math.max(1, page);
-        long safeSize = Math.min(Math.max(1, size), 50);
-        Page<VoucherOrder> raw = voucherOrderMapper.selectPage(
-                new Page<>(safePage, safeSize),
+        return toVoPage(voucherOrderMapper.selectPage(
+                safePage(page, size),
                 new LambdaQueryWrapper<VoucherOrder>()
                         .eq(VoucherOrder::getUserId, user.getId())
-                        .orderByDesc(VoucherOrder::getId));
-        List<VoucherOrderVO> records = raw.getRecords().stream().map(o -> {
-            VoucherOrderVO vo = new VoucherOrderVO();
-            vo.setId(o.getId());
-            vo.setUserId(o.getUserId());
-            vo.setVoucherId(o.getVoucherId());
-            vo.setVoucherType(o.getVoucherType());
-            vo.setStatus(o.getStatus());
-            vo.setCreateTime(o.getCreateTime());
-            vo.setCloseTime(o.getCloseTime());
-            return vo;
-        }).toList();
+                        .orderByDesc(VoucherOrder::getId)));
+    }
+
+    @Override
+    public Page<VoucherOrderVO> pageOrdersByVoucher(Long voucherId, long page, long size) {
+        if (voucherId == null) {
+            throw new LocalinkException(BaseCode.PARAM_ERROR, "voucherId 不能为空");
+        }
+        if (UserHolder.get() == null) {
+            throw new LocalinkException(BaseCode.UNAUTHORIZED);
+        }
+        return toVoPage(voucherOrderMapper.selectPage(
+                safePage(page, size),
+                new LambdaQueryWrapper<VoucherOrder>()
+                        .eq(VoucherOrder::getVoucherId, voucherId)
+                        .orderByDesc(VoucherOrder::getId)));
+    }
+
+    private Page<VoucherOrder> safePage(long page, long size) {
+        return new Page<>(Math.max(1, page), Math.min(Math.max(1, size), 50));
+    }
+
+    private Page<VoucherOrderVO> toVoPage(Page<VoucherOrder> raw) {
+        List<VoucherOrderVO> records = raw.getRecords().stream().map(this::toVo).toList();
         fillVoucherTitles(records);
         Page<VoucherOrderVO> result = new Page<>(raw.getCurrent(), raw.getSize(), raw.getTotal());
         result.setRecords(records);
         return result;
+    }
+
+    private VoucherOrderVO toVo(VoucherOrder o) {
+        VoucherOrderVO vo = new VoucherOrderVO();
+        vo.setId(o.getId());
+        vo.setUserId(o.getUserId());
+        vo.setVoucherId(o.getVoucherId());
+        vo.setVoucherType(o.getVoucherType());
+        vo.setStatus(o.getStatus());
+        vo.setCreateTime(o.getCreateTime());
+        vo.setCloseTime(o.getCloseTime());
+        return vo;
     }
 
     private void fillVoucherTitles(List<VoucherOrderVO> records) {

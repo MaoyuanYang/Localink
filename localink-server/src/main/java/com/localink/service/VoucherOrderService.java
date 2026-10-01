@@ -14,6 +14,12 @@ public interface VoucherOrderService {
     Page<VoucherOrderVO> pageMyOrders(long page, long size);
 
     /**
+     * 按活动查订单分页（W2 运营）：voucher_id 命中表键（每库单表），user_id 不在条件则两库广播归并
+     * ——与 pageMyOrders 互为镜像（sharding.md 双口径设计）。运营视角不限定用户。
+     */
+    Page<VoucherOrderVO> pageOrdersByVoucher(Long voucherId, long page, long size);
+
+    /**
      * 秒杀下单（异步版，令牌前置入口 M3.15）：一次性消费前置令牌 → 校验 → Lua 原子扣减+流水
      * → 发 Kafka 消息 → 返回预生成订单 ID。Controller 层唯一入口。
      *

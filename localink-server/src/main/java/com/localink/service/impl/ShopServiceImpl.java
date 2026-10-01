@@ -194,6 +194,9 @@ public class ShopServiceImpl implements ShopService {
     public String create(ShopDTO dto) {
         Shop shop = new Shop();
         BeanUtils.copyProperties(dto, shop, "id");
+        if (shop.getImages() == null) {
+            shop.setImages("");
+        }
         shop.setId(com.baomidou.mybatisplus.core.toolkit.IdWorker.getId());
         bloomFilterRegistry.add(BloomFilterAlias.SHOP, String.valueOf(shop.getId()));
         shopMapper.insert(shop);

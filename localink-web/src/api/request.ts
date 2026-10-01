@@ -22,8 +22,9 @@ http.interceptors.response.use(
     }
     if (result.code === 40002) {
       useAuthStore.getState().clear()
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login'
+      const loginPath = window.location.pathname.startsWith('/admin') ? '/admin/login' : '/login'
+      if (window.location.pathname !== loginPath) {
+        window.location.href = loginPath
       }
     } else {
       message.error(result.message)
@@ -42,6 +43,10 @@ export async function get<T>(url: string, params?: Record<string, unknown>, conf
 
 export async function post<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
   return (await http.post(url, data, config)) as unknown as T
+}
+
+export async function put<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
+  return (await http.put(url, data, config)) as unknown as T
 }
 
 export async function del<T>(url: string, config?: AxiosRequestConfig): Promise<T> {

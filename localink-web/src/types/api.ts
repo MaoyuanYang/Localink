@@ -81,3 +81,13 @@ export interface VoucherOrderVO {
   createTime: string
   closeTime: string | null
 }
+
+export interface SubscribeStatsVO {
+  queueSize: number
+  subscribedCount: number
+  grantedCount: number
+  noticeSent: boolean
+  title: string
+  beginTime: string | null
+  endTime: string | null
+}

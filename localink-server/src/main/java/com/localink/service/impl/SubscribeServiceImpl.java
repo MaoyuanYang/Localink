@@ -37,6 +37,7 @@ public class SubscribeServiceImpl implements SubscribeService {
     private final SnowflakeIdGenerator idGenerator;
     private final MessageProducer messageProducer;
     private final VoucherMapper voucherMapper;
+    private final com.localink.mapper.SeckillVoucherMapper seckillVoucherMapper;
 
     @Override
     public void subscribe(Long voucherId, Long userId) {
@@ -75,6 +76,44 @@ public class SubscribeServiceImpl implements SubscribeService {
                 new SeckillOrderMessage(orderId, voucherId, voucher.getType(), userId, null, null, null));
         redisCache.hashes().put(statusKey(voucherId), String.valueOf(userId), STATUS_GRANTED);
         log.info("回流自动发券: 最早订阅者获得补位, voucherId={}, userId={}, orderId={}", voucherId, userId, orderId);
+    }
+
+    @Override
+    public com.localink.api.vo.SubscribeStatsVO stats(Long voucherId) {
+        if (com.localink.framework.holder.UserHolder.get() == null) {
+            throw new com.localink.common.exception.LocalinkException(
+                    com.localink.common.code.BaseCode.UNAUTHORIZED);
+        }
+        Voucher voucher = voucherMapper.selectById(voucherId);
+        if (voucher == null || voucher.getType() == null || voucher.getType() != TYPE_SECKILL) {
+            throw new com.localink.common.exception.LocalinkException(
+                    com.localink.common.code.BaseCode.NOT_FOUND, "秒杀活动不存在");
+        }
+        com.localink.api.vo.SubscribeStatsVO vo = new com.localink.api.vo.SubscribeStatsVO();
+        vo.setTitle(voucher.getTitle());
+        Long size = redisCache.zsets().size(queueKey(voucherId));
+        vo.setQueueSize(size == null ? 0L : size);
+        long subscribed = 0;
+        long granted = 0;
+        for (String state : redisCache.hashes().entries(statusKey(voucherId)).values()) {
+            if (STATUS_GRANTED.equals(state)) {
+                granted++;
+            } else if (STATUS_SUBSCRIBED.equals(state)) {
+                subscribed++;
+            }
+        }
+        vo.setSubscribedCount(subscribed);
+        vo.setGrantedCount(granted);
+        vo.setNoticeSent(redisCache.hasKey(
+                keyBuilder.build(KeyManage.NOTICE_SENT, String.valueOf(voucherId))));
+        com.localink.entity.SeckillVoucher seckill = seckillVoucherMapper.selectOne(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<com.localink.entity.SeckillVoucher>()
+                        .eq(com.localink.entity.SeckillVoucher::getVoucherId, voucherId));
+        if (seckill != null) {
+            vo.setBeginTime(seckill.getBeginTime());
+            vo.setEndTime(seckill.getEndTime());
+        }
+        return vo;
     }
 
     private com.localink.cache.KeyBuild queueKey(Long voucherId) {
