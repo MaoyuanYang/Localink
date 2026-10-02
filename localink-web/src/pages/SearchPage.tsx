@@ -1,4 +1,4 @@
-import { Button, Card, Empty, Input, List, Radio, Space, Tag, Typography } from 'antd'
+import { Button, Card, Empty, Input, List, Radio, Skeleton, Space, Tag, Typography } from 'antd'
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { searchPosts } from '../api/search'
@@ -16,21 +16,40 @@ export default function SearchPage() {
   const [searched, setSearched] = useState(false)
   const [loading, setLoading] = useState(false)
 
-  const run = async (opts?: { searchAfter?: string }) => {
+  const run = async (opts?: { sort?: 'relevance' | 'time'; shopId?: string; searchAfter?: string }) => {
     if (!keyword.trim()) return
+    setLoading(true)
+    setRecords([])
+    try {
+      const vo = await searchPosts({
+        keyword: keyword.trim(),
+        sort: opts?.sort ?? sort,
+        shopId: opts?.shopId ?? shopId,
+        searchAfter: opts?.searchAfter,
+        size: 10,
+      })
+      setFacets(vo.shopFacets)
+      setNextSearchAfter(vo.nextSearchAfter)
+      setRecords(vo.records)
+      setSearched(true)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const loadMore = async () => {
+    if (!keyword.trim() || nextSearchAfter == null) return
     setLoading(true)
     try {
       const vo = await searchPosts({
         keyword: keyword.trim(),
         sort,
         shopId,
-        searchAfter: opts?.searchAfter,
+        searchAfter: nextSearchAfter,
         size: 10,
       })
-      setFacets(vo.shopFacets)
+      setRecords((prev) => [...prev, ...vo.records])
       setNextSearchAfter(vo.nextSearchAfter)
-      setRecords((prev) => (opts?.searchAfter ? [...prev, ...vo.records] : vo.records))
-      setSearched(true)
     } finally {
       setLoading(false)
     }
@@ -48,7 +67,7 @@ export default function SearchPage() {
             onChange={(e) => setKeyword(e.target.value)}
             onPressEnter={() => run()}
           />
-          <Button size="large" type="primary" loading={loading} onClick={() => run()}>
+          <Button size="large" type="primary" loading={loading && !searched} onClick={() => run()}>
             搜索
           </Button>
         </Space.Compact>
@@ -57,44 +76,55 @@ export default function SearchPage() {
           onChange={(e) => {
             const next = e.target.value as 'relevance' | 'time'
             setSort(next)
-            if (searched) {
-              setRecords([])
-              setTimeout(() => run(), 0)
-            }
+            if (searched) run({ sort: next })
           }}
           style={{ marginBottom: 12 }}
+          disabled={!searched}
         >
           <Radio.Button value="relevance">按相关度</Radio.Button>
           <Radio.Button value="time">按时间</Radio.Button>
         </Radio.Group>
         {shopId && (
-          <Tag closable onClose={() => { setShopId(undefined); setTimeout(() => run(), 0) }} style={{ marginBottom: 12 }}>
+          <Tag
+            closable
+            onClose={() => {
+              setShopId(undefined)
+              if (searched) run({ shopId: undefined })
+            }}
+            style={{ marginBottom: 12 }}
+          >
             仅看商户 {facets.find((f) => f.shopId === shopId)?.shopName ?? shopId}
           </Tag>
         )}
-        {searched && records.length === 0 && !loading && <Empty description="没有匹配的帖子" />}
-        <List
-          dataSource={records}
-          renderItem={(r) => (
-            <Card size="small" hoverable style={{ marginBottom: 10 }} onClick={() => navigate(`/post/${r.id}`)}>
-              <div
-                style={{ fontSize: 15, fontWeight: 600 }}
-                dangerouslySetInnerHTML={{ __html: r.titleHighlight ?? r.title }}
-              />
-              {r.contentHighlight && (
+        {loading && <Skeleton active paragraph={{ rows: 6 }} style={{ marginBottom: 12 }} />}
+        {!loading && !searched && (
+          <Empty description="输入关键词开始搜索（标题/正文全文检索，结果高亮）" style={{ marginTop: 48 }} />
+        )}
+        {!loading && searched && records.length === 0 && <Empty description="没有匹配的帖子" />}
+        {!loading && (
+          <List
+            dataSource={records}
+            renderItem={(r) => (
+              <Card size="small" hoverable style={{ marginBottom: 10 }} onClick={() => navigate(`/post/${r.id}`)}>
                 <div
-                  style={{ marginTop: 4, marginBottom: 4, color: 'rgba(0,0,0,0.45)' }}
-                  dangerouslySetInnerHTML={{ __html: r.contentHighlight }}
+                  style={{ fontSize: 15, fontWeight: 600 }}
+                  dangerouslySetInnerHTML={{ __html: r.titleHighlight ?? r.title }}
                 />
-              )}
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                {r.nickName} · {r.createTime} · 赞 {r.liked}
-              </Typography.Text>
-            </Card>
-          )}
-        />
+                {r.contentHighlight && (
+                  <div
+                    style={{ marginTop: 4, marginBottom: 4, color: 'rgba(0,0,0,0.45)' }}
+                    dangerouslySetInnerHTML={{ __html: r.contentHighlight }}
+                  />
+                )}
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  {r.nickName} · {r.createTime} · 赞 {r.liked}
+                </Typography.Text>
+              </Card>
+            )}
+          />
+        )}
         {nextSearchAfter != null && (
-          <Button block loading={loading} onClick={() => run({ searchAfter: nextSearchAfter })}>
+          <Button block loading={loading} onClick={loadMore}>
             加载更多
           </Button>
         )}
@@ -108,8 +138,7 @@ export default function SearchPage() {
               <a
                 onClick={() => {
                   setShopId(f.shopId)
-                  setRecords([])
-                  setTimeout(() => run(), 0)
+                  if (searched) run({ shopId: f.shopId })
                 }}
               >
                 {f.shopName}
