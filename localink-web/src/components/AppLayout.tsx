@@ -29,6 +29,12 @@ export default function AppLayout() {
           <Button type="link" style={{ color: '#fff', padding: 0 }} onClick={() => navigate('/')}>
             商户
           </Button>
+          <Button type="link" style={{ color: '#fff', padding: 0 }} onClick={() => navigate('/community')}>
+            社区
+          </Button>
+          <Button type="link" style={{ color: '#fff', padding: 0 }} onClick={() => navigate('/search')}>
+            搜索
+          </Button>
           <Button type="link" style={{ color: '#fff', padding: 0 }} onClick={() => navigate('/orders')}>
             我的订单
           </Button>

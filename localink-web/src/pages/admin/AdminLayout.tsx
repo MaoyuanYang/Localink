@@ -10,6 +10,9 @@ const MENU_ITEMS = [
   { key: '/admin/vouchers', label: '券与活动' },
   { key: '/admin/orders', label: '订单监控' },
   { key: '/admin/subscribe', label: '订阅提醒' },
+  { key: '/admin/audit', label: '审核队列' },
+  { key: '/admin/top-buyers', label: 'Top 买家' },
+  { key: '/admin/reconcile', label: '对账看板' },
 ]
 
 export default function AdminLayout() {
