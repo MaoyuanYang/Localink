@@ -145,6 +145,20 @@ public class PostServiceImpl implements PostService {
     }
 
     @Override
+    public PageVO<PostVO> adminPage(long page, long size, Integer auditStatus) {
+        if (UserHolder.get() == null) {
+            throw new LocalinkException(BaseCode.UNAUTHORIZED);
+        }
+        long safePage = Math.max(1, page);
+        long safeSize = Math.min(Math.max(1, size), 50);
+        Page<Post> result = postMapper.selectPage(new Page<>(safePage, safeSize),
+                new LambdaQueryWrapper<Post>()
+                        .eq(auditStatus != null, Post::getAuditStatus, auditStatus)
+                        .orderByDesc(Post::getCreateTime));
+        return PageVO.of(result.getTotal(), toVo(result.getRecords()));
+    }
+
+    @Override
     public List<PostVO> listOrdered(List<Long> orderedIds) {
         if (orderedIds.isEmpty()) {
             return List.of();
@@ -181,6 +195,7 @@ public class PostServiceImpl implements PostService {
             vo.setLiked(post.getLiked());
             vo.setComments(post.getComments());
             vo.setViewed(post.getViewed());
+            vo.setAuditStatus(post.getAuditStatus());
             vo.setCreateTime(post.getCreateTime());
             return vo;
         }).collect(Collectors.toList());

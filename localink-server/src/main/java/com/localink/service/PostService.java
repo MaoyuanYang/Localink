@@ -30,6 +30,12 @@ public interface PostService {
     PageVO<PostVO> page(long page, long size, Long shopId);
 
     /**
+     * 运营审核队列观测（W3）：按 auditStatus 筛选（null=全部）、createTime 倒序、含驳回帖；
+     * GET 匿名可达（拦截器只拦非 GET），Service 显式判登录。观测定位——状态机先发后审无待审 0 队列。
+     */
+    PageVO<PostVO> adminPage(long page, long size, Integer auditStatus);
+
+    /**
      * 按传入顺序返回过审帖 VO：缺失/未过审跳过（M6-B 点赞榜等按序回填场景）。
      */
     List<PostVO> listOrdered(List<Long> orderedIds);

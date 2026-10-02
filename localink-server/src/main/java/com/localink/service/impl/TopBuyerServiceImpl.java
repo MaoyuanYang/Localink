@@ -28,6 +28,7 @@ public class TopBuyerServiceImpl implements TopBuyerService {
 
     private final RedisCache redisCache;
     private final KeyBuilder keyBuilder;
+    private final com.localink.mapper.UserMapper userMapper;
 
     @Override
     public void recordOrder(Long shopId, Long userId) {
@@ -41,13 +42,28 @@ public class TopBuyerServiceImpl implements TopBuyerService {
         String day = date != null ? date : LocalDate.now().format(DATE);
         Set<ZSetEntry<String>> entries = redisCache.zsets().reverseRangeWithScore(
                 keyBuilder.build(KeyManage.SHOP_TOP_BUYERS, shopId, day), 0, limit - 1, String.class);
+        List<Long> userIds = entries.stream().map(e -> Long.valueOf(e.value())).toList();
+        Map<Long, String> nickNames = nickNamesOf(userIds);
         List<Map<String, Object>> result = new ArrayList<>();
         for (ZSetEntry<String> entry : entries) {
+            Long userId = Long.valueOf(entry.value());
             Map<String, Object> row = new LinkedHashMap<>();
-            row.put("userId", Long.valueOf(entry.value()));
+            row.put("userId", userId);
+            row.put("nickName", nickNames.getOrDefault(userId, "用户" + String.valueOf(userId)
+                    .substring(String.valueOf(userId).length() - 4)));
             row.put("count", (long) entry.score());
             result.add(row);
         }
         return result;
+    }
+
+    private Map<Long, String> nickNamesOf(List<Long> userIds) {
+        if (userIds.isEmpty()) {
+            return Map.of();
+        }
+        return userMapper.selectBatchIds(userIds).stream()
+                .collect(java.util.stream.Collectors.toMap(com.localink.entity.User::getId,
+                        u -> u.getNickName() == null || u.getNickName().isBlank() ? "匿名用户" : u.getNickName(),
+                        (a, b) -> a));
     }
 }

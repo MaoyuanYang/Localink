@@ -6,42 +6,37 @@ import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import lombok.Data;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 /**
- * 评论视图（M6-A）：一级评论分页载体，楼中楼挂 children；replyNickName 为被回复者昵称。
+ * 回滚失败行（W3 运营看板）：统一回滚执行失败落表，对账 Job 周期重试（成功删行、失败 retryAttempts+1），
+ * 行龄超阈值（默认 24h）error 告警。
  */
 @Data
-public class CommentVO {
+public class RollbackFailureVO {
 
     @JsonSerialize(using = ToStringSerializer.class)
     private Long id;
 
     @JsonSerialize(using = ToStringSerializer.class)
-    private Long postId;
+    private Long voucherId;
 
     @JsonSerialize(using = ToStringSerializer.class)
     private Long userId;
 
-    private String nickName;
+    @JsonSerialize(using = ToStringSerializer.class)
+    private Long orderId;
 
     @JsonSerialize(using = ToStringSerializer.class)
-    private Long parentId;
+    private Long traceId;
 
-    @JsonSerialize(using = ToStringSerializer.class)
-    private Long replyId;
+    private String resultCode;
 
-    private String replyNickName;
+    private Integer retryAttempts;
 
-    private String content;
+    private String source;
 
-    private Integer liked;
+    private String detail;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createTime;
-
-    /**
-     * 楼中楼（仅一级评论携带，按时间正序）。
-     */
-    private List<CommentVO> children;
 }

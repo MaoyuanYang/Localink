@@ -124,11 +124,13 @@ class SignIntegrationTest {
         for (int day = 1; day <= today - 1; day++) {
             redisCache.bitmaps().setBit(signKey(LocalDate.now()), day - 1, true);
         }
-        // 上月最后 3 天已签（第 29/30/31 位）
+        // 上月最后 3 天已签——按上月实际长度置位（W3 排障：硬编码位 28/29/30 假设 31 天大月，
+        // 10 月初遇 9 月 30 天时位 30 是不存在日期，跨月续查只连上 2 天）
         LocalDate lastMonth = LocalDate.now().minusMonths(1);
-        redisCache.bitmaps().setBit(signKey(lastMonth), 28, true);
-        redisCache.bitmaps().setBit(signKey(lastMonth), 29, true);
-        redisCache.bitmaps().setBit(signKey(lastMonth), 30, true);
+        int lastLen = lastMonth.lengthOfMonth();
+        redisCache.bitmaps().setBit(signKey(lastMonth), lastLen - 3, true);
+        redisCache.bitmaps().setBit(signKey(lastMonth), lastLen - 2, true);
+        redisCache.bitmaps().setBit(signKey(lastMonth), lastLen - 1, true);
 
         mockMvc.perform(post("/api/user/sign").header("Authorization", token))
                 .andExpect(jsonPath("$.data.continuousDays").value(today + 3))
