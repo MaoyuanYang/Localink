@@ -74,6 +74,7 @@ curl -X POST "http://localhost:9200/_analyze" -H "Content-Type: application/json
 | 端口被占用 | `netstat -ano \| findstr :3306` 找到占用进程 |
 | Kafka 起不来且日志报 CLUSTER_ID 冲突 | `docker compose down -v` 清卷重来 |
 | ES 容器反复重启 | `docker logs localink-es` 看 ik 插件下载是否失败（网络），restart 策略会自动重试；插件装在容器层，容器重建（down/up）会重装 |
+| 跑全量测试报 `Too many connections` | 测试套件多 Spring 上下文并发持池（surefire 已把每池钉到 10），上下文总数×池仍可能超默认 `max_connections=151`（T1 加第 49 个上下文时实测触发）：`docker exec localink-mysql mysql -uroot -plocalink123 -e "SET GLOBAL max_connections=300"` 后重跑；根因与串行纪律见 AGENTS.md §10 |
 | `_analyze` 报 unknown analyzer [ik_max_word] | ik 未装上：进容器 `bin/elasticsearch-plugin install https://get.infini.cloud/elasticsearch/analysis-ik/8.15.5` 后 `docker restart localink-es` |
 
 ## 6. 与本项目配置的对应关系

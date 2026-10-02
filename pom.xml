@@ -177,6 +177,34 @@
                     <parameters>true</parameters>
                 </configuration>
             </plugin>
+            <!-- T2 接入（G-4）：JaCoCo 行覆盖度量，test 阶段产出报告；
+                 只出数不做门禁（集成测试语境下行覆盖仅供参考，语义断言为主）。
+                 exec 落 JVM tmpdir 而非 target——仓库路径含非 ASCII（中文目录）时
+                 destfile 会静默写失败（本机实测），tmpdir 在 Windows/Linux 均为 ASCII -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.12</version>
+                <configuration>
+                    <destFile>${java.io.tmpdir}/jacoco-${project.artifactId}.exec</destFile>
+                    <dataFile>${java.io.tmpdir}/jacoco-${project.artifactId}.exec</dataFile>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 </project>
