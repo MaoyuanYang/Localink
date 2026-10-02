@@ -52,7 +52,7 @@ if [ -n "$VUIDS" ]; then
 fi
 
 echo "== 5. ES 兜底清理（[verify] 帖若经 DB 直删未同步） =="
-curl -s -X POST "http://localhost:9200/lk_posts/_delete_by_query" -H "Content-Type: application/json" -d '{"query":{"wildcard":{"title.keyword":"[verify]*"}}}' | head -c 200; echo
+curl -s -X POST "http://localhost:9200/post/_delete_by_query" -H "Content-Type: application/json" -d '{"query":{"wildcard":{"title.keyword":"[verify]*"}}}' | head -c 200; echo
 
 echo "== 6. 复查计数（不信命令返回，看数字） =="
 c1=$($M -e "SELECT COUNT(*) FROM localink.lk_user WHERE phone LIKE '1397777%' OR (phone+0 BETWEEN 50001 AND 50400)" 2>/dev/null)
