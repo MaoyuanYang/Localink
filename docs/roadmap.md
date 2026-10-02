@@ -62,3 +62,4 @@
 - [x] **W2 运营后台**：/admin 布局 + 登录守卫 + 商户/券管理 + 订阅提醒 + 订单状态（超时关闭）展示 —— 前置：M5（2026-09-30 完成，含 admin 订单查询/手动关单/订阅统计 3 补口端点与商户 images 缺省修复，任务卡 `docs/iterations/w2-admin.md`）
 - [x] **W3 社区 + 后台扩展**：Feed/发帖（图片上传）/评论/点赞/关注/搜索/热榜/签到 + 审核队列 + Top 买家/对账看板 —— 前置：M6（2026-10-02 完成，含 4 个 admin 补口端点与社区 VO id 字符串化/时间格式两处既有契约修复，任务卡 `docs/iterations/w3-community.md`）
 - [x] **W4 打磨**：加载/空态、README、部署说明（nginx） —— 前置：M7（2026-10-02 完成，含 SearchPage 参数闭包修复、一键脚本 dev-all.ps1、演示剧本 demo-script.md、nginx 生产节；任务卡 `docs/iterations/w4-polish.md`。**Web 前端线 W0~W4 全部完成，roadmap 全清**）
+- [x] **T1 深度体检**：前后端整体体检 + 既有测试方案评估 + 新增测试角度（W0~W4 运行时首验、黑盒 part3 46 断言、后端安全/负面矩阵 5 类 29 用例、前端 Vitest 32 用例、验证脚本 4 处缺陷修复、种子数据 cp1252 双重编码还原；报告 [docs/VERIFICATION.md](VERIFICATION.md)、任务卡 `docs/iterations/t1-deep-audit.md`）—— 2026-10-02
