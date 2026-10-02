@@ -3,6 +3,7 @@
 | 版本 | 日期 | 说明 |
 |---|---|---|
 | v1.0 | 2026-08-13 | 初版（M0.7 产出）；代码在 M1 完成后启动 |
+| v1.2 | 2026-10-02 | W4 收官注记：加载/空态全局补全；生产口径=nginx 反代 /api 与 /upload 到 8086+SPA fallback（与 dev proxy 同构，见 deploy.md §10）；一键脚本 scripts/dev-all.ps1 与演示剧本 docs/demo-script.md |
 | v1.1 | 2026-09-30 | W0 落地注记：工程骨架 + 登录/商户/普通券闭环按 §4/§5 约定实现；配套后端 dev 取码接口（`localink.dev.sms-code-query.enabled`，默认 false，见 deploy.md §10） |
 
 ---
@@ -68,7 +69,7 @@ localink-web/
 
 | 约定 | 规范 |
 |---|---|
-| baseURL | 开发环境走 Vite dev proxy（`/api` → `http://localhost:8086`），避免手写 CORS |
+| baseURL | 开发环境走 Vite dev proxy（`/api`、`/upload` → `http://localhost:8086`）；生产 nginx 反代同构（SPA fallback + /api、/upload proxy_pass），前端零改动 |
 | 认证 | token 存 `authStore`（持久化 localStorage），axios 请求拦截器注入请求头 `Authorization`（值为裸 token，无 Bearer 前缀，M1.5 定稿） |
 | 统一返回 | 响应拦截器解包 `Result`：`code=0` 取 `data`，非 0 按错误码 toast 并 reject |
 | 会话失效 | 捕获 40002 未登录错误码 → 清空 authStore → 跳转登录页（C 端）或 /admin/login |

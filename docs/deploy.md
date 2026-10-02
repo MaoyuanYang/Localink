@@ -106,7 +106,15 @@ docker exec localink-kafka bash -c "/opt/kafka/bin/kafka-consumer-groups.sh --bo
 
 ## 10. 前端部署
 
-Web 前端线（`localink-web/`，React 18 + TS + Vite 6 + AntD 5）W0 起已启动。
+Web 前端线（`localink-web/`，React 18 + TS + Vite 6 + AntD 5）W0~W4 全部落地。
+
+**一键起前后端（演示口径，推荐）**：
+
+```powershell
+powershell -File scripts\dev-all.ps1 -DevSms
+# 双端探活就绪后输出访问地址；Ctrl+C 自动清理进程树
+# -DevSms 同时开启 dev 取码接口（登录页自动回填验证码，仅演示！）
+```
 
 **本地开发模式（W0 口径）**：
 
@@ -114,9 +122,67 @@ Web 前端线（`localink-web/`，React 18 + TS + Vite 6 + AntD 5）W0 起已启
 # 前置：后端已按 §4 启动（8086）
 cd localink-web
 npm install
-npm run dev        # 5173，dev proxy /api → http://localhost:8086，无 CORS 配置需求
+npm run dev        # 5173，dev proxy /api 与 /upload → http://localhost:8086，无 CORS 配置需求
 ```
 
 登录页验证码：开发模式自动调 `GET /api/sms/code/dev` 回填（需上方 dev 开关开启，默认提示降级为 redis-cli 取码命令）。
 
-nginx 生产部署与后端反代配置待 W4 主题落地后补充于此节。
+**生产部署（nginx，W4 口径）**：
+
+```powershell
+# 1) 构建静态产物（dist/index.html + dist/assets/*.js + public 资源）
+cd localink-web
+npm install
+npm run build
+```
+
+产物特点：无 `base` 前缀（部署在域名根路径）；路由为 BrowserRouter 深路径（`/shop/:id`、`/admin/*` 等）——**刷新深路径必须 SPA fallback**，否则 404。
+
+```nginx
+# 2) nginx server 块（与 dev proxy 完全同构：/api 与 /upload 反代到后端，前端零改动切换环境）
+server {
+    listen 80;
+    server_name your.domain;
+
+    # 前端静态产物（按实际路径调整）
+    root /opt/localink/localink-web/dist;
+    index index.html;
+
+    # SPA 路由 fallback：深路径刷新回 index.html
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # API 反代（axios 用相对路径 /api/...，同源无 CORS）
+    location /api {
+        proxy_pass http://127.0.0.1:8086;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;      # 后端 IP 维度限流依赖此头
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    # 上传图片反代（后端 StorageWebConfig 映射 /upload/** → ./upload 目录）
+    location /upload {
+        proxy_pass http://127.0.0.1:8086;
+    }
+
+    # 带内容 hash 的静态资源可长缓存
+    location /assets/ {
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # 可选：gzip
+    gzip on;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+}
+```
+
+**生产注意事项（与 §9 FAQ 联动）**：
+
+| 项 | 要求 |
+|---|---|
+| `localink.security.admin-guard.enabled` | **必须 true** + 配置 `admin-phones` 白名单（/admin 页与全部 @AdminOnly 端点） |
+| `localink.dev.sms-code-query.enabled` | **必须保持 false**（该接口等于"任意账号可登录"的后门） |
+| 上传目录 `./upload` | 相对后端工作目录，需持久化（nginx 只反代不落盘） |
+| 后端启动 | 按 §4（建议 `-Xms`=`-Xmx`），无需任何 CORS 配置 |
