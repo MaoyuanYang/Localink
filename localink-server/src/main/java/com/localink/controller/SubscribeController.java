@@ -51,7 +51,10 @@ public class SubscribeController {
     @GetMapping("/shop/{shopId}/top-buyers")
     public Result<List<Map<String, Object>>> topBuyers(@PathVariable Long shopId,
                                                        @RequestParam(required = false) String date) {
-        return Result.ok(topBuyerService.topBuyers(shopId, date, 10));
+        List<Map<String, Object>> rows = topBuyerService.topBuyers(shopId, date, 10);
+        // JSON 边界字符串化雪花 id（Map 不走 ToStringSerializer，防 JS 精度丢失）
+        rows.forEach(row -> row.put("userId", String.valueOf(row.get("userId"))));
+        return Result.ok(rows);
     }
 
     /**

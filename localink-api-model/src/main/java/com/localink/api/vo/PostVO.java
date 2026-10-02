@@ -1,5 +1,8 @@
 package com.localink.api.vo;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -12,12 +15,15 @@ import java.util.List;
 @Data
 public class PostVO {
 
+    @JsonSerialize(using = ToStringSerializer.class)
     private Long id;
 
+    @JsonSerialize(using = ToStringSerializer.class)
     private Long userId;
 
     private String nickName;
 
+    @JsonSerialize(using = ToStringSerializer.class)
     private Long shopId;
 
     private String title;
@@ -37,5 +43,11 @@ public class PostVO {
 
     private Integer viewed;
 
+    /**
+     * 审核状态：1 在架 / 2 驳回（W3 admin 查询填充；状态机先发后审无 0 待审态）。
+     */
+    private Integer auditStatus;
+
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createTime;
 }

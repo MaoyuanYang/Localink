@@ -1,5 +1,7 @@
 package com.localink.api.vo;
 
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import lombok.Data;
 
 /**
@@ -9,6 +11,7 @@ import lombok.Data;
 @Data
 public class PostSearchVO {
 
+    @JsonSerialize(using = ToStringSerializer.class)
     private Long id;
 
     private String title;
@@ -19,6 +22,7 @@ public class PostSearchVO {
 
     private String nickName;
 
+    @JsonSerialize(using = ToStringSerializer.class)
     private Long shopId;
 
     private Integer liked;

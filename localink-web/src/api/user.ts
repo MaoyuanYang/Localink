@@ -1,5 +1,5 @@
 import { get, post, del } from './request'
-import type { UserDTO } from '../types/api'
+import type { SignVO, UserDTO } from '../types/api'
 
 export function sendSmsCode(phone: string) {
   return post<void>('/api/sms/code', { phone })
@@ -19,4 +19,12 @@ export function fetchMe() {
 
 export function logout() {
   return del<void>('/api/user/logout')
+}
+
+export function signToday() {
+  return post<SignVO>('/api/user/sign')
+}
+
+export function fetchSignStatus() {
+  return get<SignVO>('/api/user/sign')
 }

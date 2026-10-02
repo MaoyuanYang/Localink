@@ -60,6 +60,17 @@ public class PostController {
         return Result.ok(postService.page(page, size, shopId));
     }
 
+    /**
+     * 审核队列观测（W3）：auditStatus 筛选（1 在架/2 驳回，空=全部）；状态机先发后审无待审 0 队列。
+     */
+    @com.localink.framework.auth.AdminOnly
+    @GetMapping("/admin/page")
+    public Result<PageVO<PostVO>> adminPage(@RequestParam(defaultValue = "1") long page,
+                                            @RequestParam(defaultValue = "10") long size,
+                                            @RequestParam(required = false) Integer auditStatus) {
+        return Result.ok(postService.adminPage(page, size, auditStatus));
+    }
+
     @PostMapping("/comment")
     public Result<String> comment(@Validated @RequestBody CommentCreateDTO dto) {
         return Result.ok(commentService.create(dto));

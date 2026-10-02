@@ -6,42 +6,43 @@ import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import lombok.Data;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 /**
- * 评论视图（M6-A）：一级评论分页载体，楼中楼挂 children；replyNickName 为被回复者昵称。
+ * 对账流水行（W3 运营看板）：Redis 流水↔DB 单向比对的账本。
+ * logType：1 扣减 / 2 恢复；reconciliationStatus：1 待处理 / 4 一致（2/3 为枚举预留）。
  */
 @Data
-public class CommentVO {
+public class ReconcileLogVO {
 
     @JsonSerialize(using = ToStringSerializer.class)
     private Long id;
 
     @JsonSerialize(using = ToStringSerializer.class)
-    private Long postId;
+    private Long orderId;
 
     @JsonSerialize(using = ToStringSerializer.class)
     private Long userId;
 
-    private String nickName;
+    @JsonSerialize(using = ToStringSerializer.class)
+    private Long voucherId;
 
     @JsonSerialize(using = ToStringSerializer.class)
-    private Long parentId;
+    private Long traceId;
 
-    @JsonSerialize(using = ToStringSerializer.class)
-    private Long replyId;
+    private Integer logType;
 
-    private String replyNickName;
+    private Integer businessType;
 
-    private String content;
+    private Integer reconciliationStatus;
 
-    private Integer liked;
+    private Integer beforeQty;
+
+    private Integer changeQty;
+
+    private Integer afterQty;
+
+    private String detail;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createTime;
-
-    /**
-     * 楼中楼（仅一级评论携带，按时间正序）。
-     */
-    private List<CommentVO> children;
 }
