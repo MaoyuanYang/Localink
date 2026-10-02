@@ -1,4 +1,4 @@
-import { Avatar, Button, Card, Empty, Image, Input, List, Modal, Pagination, Popconfirm, Space, Typography, App } from 'antd'
+import { Avatar, Button, Card, Empty, Image, Input, List, Modal, Pagination, Popconfirm, Skeleton, Space, Spin, Typography, App } from 'antd'
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { deleteComment, deletePost, fetchPost, likePost, pageComments, unlikePost, createComment } from '../api/post'
@@ -21,6 +21,10 @@ export default function PostDetailPage() {
   const [commentInput, setCommentInput] = useState('')
   const [replyTo, setReplyTo] = useState<CommentVO | null>(null)
   const [following, setFollowing] = useState(false)
+  const [liking, setLiking] = useState(false)
+  const [followLoading, setFollowLoading] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [commentsLoading, setCommentsLoading] = useState(false)
   const [commonOpen, setCommonOpen] = useState(false)
   const [commonFollows, setCommonFollows] = useState<UserBriefVO[] | null>(null)
 
@@ -37,12 +41,14 @@ export default function PostDetailPage() {
 
   const loadComments = useCallback(() => {
     if (!id) return
+    setCommentsLoading(true)
     pageComments(id, commentPage, 10)
       .then((p) => {
         setComments(p.records)
         setCommentTotal(p.total)
       })
       .catch(() => setComments([]))
+      .finally(() => setCommentsLoading(false))
   }, [id, commentPage])
 
   useEffect(() => {
@@ -54,7 +60,9 @@ export default function PostDetailPage() {
   }, [loadComments])
 
   const handleLike = async () => {
-    if (!post) return
+    if (!post || liking) return
+    setLiking(true)
+    try {
     if (liked) {
       const n = await unlikePost(post.id)
       setLiked(false)
@@ -63,6 +71,9 @@ export default function PostDetailPage() {
       const n = await likePost(post.id)
       setLiked(true)
       setPost({ ...post, liked: n })
+    }
+    } finally {
+      setLiking(false)
     }
   }
 
@@ -74,7 +85,9 @@ export default function PostDetailPage() {
   }
 
   const handleFollow = async () => {
-    if (!post) return
+    if (!post || followLoading) return
+    setFollowLoading(true)
+    try {
     if (following) {
       await unfollowUser(post.userId)
       setFollowing(false)
@@ -83,6 +96,9 @@ export default function PostDetailPage() {
       await followUser(post.userId)
       setFollowing(true)
       messageApi.success('已关注')
+    }
+    } finally {
+      setFollowLoading(false)
     }
   }
 
@@ -98,7 +114,9 @@ export default function PostDetailPage() {
   }
 
   const submitComment = async () => {
-    if (!post || !commentInput.trim()) return
+    if (!post || !commentInput.trim() || submitting) return
+    setSubmitting(true)
+    try {
     await createComment({
       postId: post.id,
       content: commentInput.trim(),
@@ -110,6 +128,9 @@ export default function PostDetailPage() {
     setReplyTo(null)
     loadComments()
     loadPost()
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const handleDeleteComment = async (c: CommentVO) => {
@@ -120,7 +141,7 @@ export default function PostDetailPage() {
   }
 
   if (loading) {
-    return <Typography.Paragraph>加载中…</Typography.Paragraph>
+    return <Skeleton active paragraph={{ rows: 8 }} />
   }
   if (!post) {
     return <Empty description="帖子不存在或未过审" />
@@ -155,7 +176,7 @@ export default function PostDetailPage() {
           </div>
           {!isMine && loggedIn && (
             <Space>
-              <Button size="small" type={following ? 'default' : 'primary'} onClick={handleFollow}>
+              <Button size="small" type={following ? 'default' : 'primary'} loading={followLoading} onClick={handleFollow}>
                 {following ? '已关注（点击取关）' : '+ 关注'}
               </Button>
               <Button size="small" onClick={openCommon}>共同关注</Button>
@@ -173,7 +194,7 @@ export default function PostDetailPage() {
           </Image.PreviewGroup>
         )}
         <Space style={{ marginTop: 16 }}>
-          <Button type={liked ? 'primary' : 'default'} danger={liked} onClick={handleLike}>
+          <Button type={liked ? 'primary' : 'default'} danger={liked} loading={liking} onClick={handleLike}>
             {liked ? '❤ 已赞' : '♡ 点赞'} {post.liked}
           </Button>
           <Typography.Text type="secondary">评论 {post.comments}</Typography.Text>
@@ -190,7 +211,7 @@ export default function PostDetailPage() {
               onChange={(e) => setCommentInput(e.target.value)}
               onPressEnter={submitComment}
             />
-            <Button type="primary" onClick={submitComment}>{replyTo ? '回复' : '评论'}</Button>
+            <Button type="primary" loading={submitting} onClick={submitComment}>{replyTo ? '回复' : '评论'}</Button>
           </Space.Compact>
         ) : (
           <Typography.Paragraph type="secondary">
@@ -204,6 +225,7 @@ export default function PostDetailPage() {
           </Typography.Paragraph>
         )}
         <List
+          loading={commentsLoading}
           dataSource={comments}
           locale={{ emptyText: '暂无评论' }}
           renderItem={(c) => (
@@ -222,7 +244,7 @@ export default function PostDetailPage() {
 
       <Modal title="共同关注" open={commonOpen} onCancel={() => setCommonOpen(false)} footer={null}>
         {commonFollows === null ? (
-          <Typography.Text>加载中…</Typography.Text>
+          <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
         ) : commonFollows.length === 0 ? (
           <Typography.Text type="secondary">暂无共同关注</Typography.Text>
         ) : (

@@ -26,18 +26,24 @@ export default function AdminShopsPage() {
   const [size] = useState(10)
   const [loading, setLoading] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [typesLoading, setTypesLoading] = useState(false)
   const [editing, setEditing] = useState<ShopVO | null>(null)
   const [form] = Form.useForm<ShopFormValues>()
 
   const load = useCallback(() => {
     setLoading(true)
+    setTypesLoading(true)
     Promise.all([pageShops(null, page, size), fetchShopTypes()])
       .then(([p, t]) => {
         setShops(p.records)
         setTotal(p.total)
         setTypes(t)
       })
-      .finally(() => setLoading(false))
+      .finally(() => {
+        setLoading(false)
+        setTypesLoading(false)
+      })
   }, [page, size])
 
   useEffect(() => {
@@ -68,6 +74,8 @@ export default function AdminShopsPage() {
   }
 
   const handleSubmit = async (values: ShopFormValues) => {
+    setSubmitting(true)
+    try {
     if (editing) {
       await updateShop({ ...values, id: editing.id } as Record<string, unknown>)
       messageApi.success('商户已更新（缓存已失效，C 端刷新可见）')
@@ -76,6 +84,9 @@ export default function AdminShopsPage() {
       messageApi.success('商户已创建')
     }
     setModalOpen(false)
+    } finally {
+      setSubmitting(false)
+    }
     load()
   }
 
@@ -125,7 +136,7 @@ export default function AdminShopsPage() {
           {
             key: 'types',
             label: '商户类型管理',
-            children: <TypePanel types={types} onChanged={load} />,
+            children: <TypePanel types={types} loading={typesLoading} onChanged={load} />,
           },
         ]}
       />
@@ -135,6 +146,7 @@ export default function AdminShopsPage() {
         open={modalOpen}
         onCancel={() => setModalOpen(false)}
         onOk={() => form.submit()}
+        confirmLoading={submitting}
         destroyOnClose
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
@@ -173,7 +185,7 @@ export default function AdminShopsPage() {
   )
 }
 
-function TypePanel({ types, onChanged }: { types: ShopTypeVO[]; onChanged: () => void }) {
+function TypePanel({ types, loading, onChanged }: { types: ShopTypeVO[]; loading?: boolean; onChanged: () => void }) {
   const { message: messageApi } = App.useApp()
   const [form] = Form.useForm<{ name: string; sort?: number }>()
   const [editing, setEditing] = useState<ShopTypeVO | null>(null)
@@ -196,6 +208,7 @@ function TypePanel({ types, onChanged }: { types: ShopTypeVO[]; onChanged: () =>
       <Table<ShopTypeVO>
         rowKey="id"
         size="small"
+        loading={loading}
         dataSource={types}
         pagination={false}
         columns={[

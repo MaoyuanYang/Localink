@@ -18,6 +18,7 @@ export default function LoginForm({ title, onSuccess }: LoginFormProps) {
   const [form] = Form.useForm<LoginFormValues>()
   const [countdown, setCountdown] = useState(0)
   const [sending, setSending] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const setToken = useAuthStore((s) => s.setToken)
   const setUser = useAuthStore((s) => s.setUser)
 
@@ -61,12 +62,18 @@ export default function LoginForm({ title, onSuccess }: LoginFormProps) {
   }
 
   const handleFinish = async (values: LoginFormValues) => {
+    if (submitting) return
+    setSubmitting(true)
+    try {
     const token = await login(values.phone, values.code)
     setToken(token)
     const me = await fetchMe()
     setUser(me)
     messageApi.success(`欢迎，${me.nickName || me.phone}`)
     onSuccess()
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -95,7 +102,7 @@ export default function LoginForm({ title, onSuccess }: LoginFormProps) {
             />
           </Form.Item>
           <Form.Item style={{ marginBottom: 0 }}>
-            <Button type="primary" htmlType="submit" block>
+            <Button type="primary" htmlType="submit" block loading={submitting}>
               登录（未注册自动创建账号）
             </Button>
           </Form.Item>

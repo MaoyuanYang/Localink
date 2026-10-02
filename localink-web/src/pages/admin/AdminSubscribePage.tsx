@@ -1,4 +1,4 @@
-import { Button, Card, Descriptions, Select, Space, Spin, Typography } from 'antd'
+import { Button, Card, Descriptions, Empty, Select, Skeleton, Space, Typography } from 'antd'
 import { useEffect, useState } from 'react'
 import { pageShops } from '../../api/shop'
 import { fetchSubscribeStats, listSeckillVouchers } from '../../api/seckill'
@@ -66,7 +66,8 @@ export default function AdminSubscribePage() {
           预通知全自动：创建活动即投递延迟任务，开抢前 2 分钟到期圈名单（等级达标用户 + 店铺 Top 买家）写入各用户通知收件箱，SETNX 标记防重发。已知限制：编辑活动改开始时间不会重投预通知任务。
         </Typography.Paragraph>
 
-        {loading && <Spin />}
+        {loading && <Skeleton active paragraph={{ rows: 3 }} />}
+        {!voucherId && !loading && <Empty description="选择商户与秒杀活动后展示订阅统计" style={{ marginTop: 32 }} />}
         {stats && !loading && (
           <Descriptions bordered size="small" column={2}>
             <Descriptions.Item label="活动">{stats.title}</Descriptions.Item>

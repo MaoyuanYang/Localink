@@ -1,4 +1,4 @@
-import { Button, Card, Empty, Form, Input, Modal, Select, Space, Tabs, Typography, Upload, App } from 'antd'
+import { Button, Card, Empty, Form, Input, Modal, Select, Skeleton, Space, Tabs, Typography, Upload, App } from 'antd'
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { UploadFile } from 'antd'
@@ -140,6 +140,10 @@ export default function CommunityPage() {
                     <Empty description={<span>登录后查看关注流 <Button type="link" style={{ padding: 0 }} onClick={() => navigate('/login')}>去登录</Button></span>} />
                   ) : (
                     <>
+                      {feedLoading && feed.length === 0 && <Skeleton active paragraph={{ rows: 6 }} style={{ marginBottom: 12 }} />}
+                      {feed.length === 0 && !feedLoading && nextCursor === null && (
+                        <Empty description={<span>关注的人还没有动态——去逛逛商户或发布第一篇帖子</span>} style={{ marginTop: 32 }} />
+                      )}
                       {feed.map((p) => (
                         <PostCard key={p.id} post={p} />
                       ))}
@@ -166,7 +170,7 @@ export default function CommunityPage() {
                   <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
                     热度 =（赞×5 + 评论×3 + 浏览×1）× e^(−ln2/72h·Δt)，半衰期 72 小时，每 5 分钟全量重算。
                   </Typography.Paragraph>
-                  {hotLoading ? <Typography.Text>加载中…</Typography.Text> : hot.length === 0 ? <Empty description="暂无上榜帖子" /> : hot.map((p, i) => <PostCard key={p.id} post={p} rank={i} />)}
+                  {hotLoading ? <Skeleton active paragraph={{ rows: 5 }} /> : hot.length === 0 ? <Empty description="暂无上榜帖子" /> : hot.map((p, i) => <PostCard key={p.id} post={p} rank={i} />)}
                 </>
               ),
             },
