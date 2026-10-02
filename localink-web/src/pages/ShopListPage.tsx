@@ -1,4 +1,4 @@
-import { Card, Col, Empty, List, Pagination, Row, Select, Skeleton, Tag, Typography } from 'antd'
+import { Card, Col, Empty, List, Pagination, Row, Select, Skeleton, Spin, Tag, Typography } from 'antd'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { fetchShopTypes, pageShops } from '../api/shop'
@@ -47,6 +47,7 @@ export default function ShopListPage() {
           options={types.map((t) => ({ value: t.id, label: t.name }))}
         />
       </Row>
+      <Spin spinning={loading}>
       <Skeleton loading={loading && shops.length === 0} active paragraph={{ rows: 6 }}>
         {shops.length === 0 && !loading ? (
           <Empty description="暂无商户" />
@@ -92,6 +93,7 @@ export default function ShopListPage() {
           />
         )}
       </Skeleton>
+      </Spin>
       <Row justify="end" style={{ marginTop: 24 }}>
         <Pagination current={page} pageSize={size} total={total} showTotal={(t) => `共 ${t} 家`} onChange={setPage} />
       </Row>

@@ -1,4 +1,4 @@
-import { Button, Card, Select, Space, Table, Typography, App } from 'antd'
+import { Button, Card, Empty, Select, Space, Table, Typography, App } from 'antd'
 import { useCallback, useEffect, useState } from 'react'
 import { pageShops } from '../../api/shop'
 import { listSeckillVouchers } from '../../api/seckill'
@@ -89,6 +89,7 @@ export default function AdminOrdersPage() {
         <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
           正路：下单后 15 分钟未支付由延迟队列自动关单（状态→超时关闭，库存回流）；"模拟超时关单"是运营补偿/演示入口，立即执行同一套关单动作。
         </Typography.Paragraph>
+        {!voucherId && <Empty description="选择商户与秒杀活动后展示订单" style={{ marginTop: 32 }} />}
         {voucherId && (
           <Table<VoucherOrderVO>
             rowKey="id"

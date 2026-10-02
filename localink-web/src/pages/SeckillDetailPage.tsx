@@ -1,4 +1,4 @@
-import { Button, Card, Col, Descriptions, Row, Skeleton, Tag, Typography, App } from 'antd'
+import { Button, Card, Col, Descriptions, Empty, Row, Skeleton, Tag, Typography, App } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
 import dayjs from 'dayjs'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -82,7 +82,7 @@ export default function SeckillDetailPage() {
     return <Skeleton active paragraph={{ rows: 8 }} />
   }
   if (!seckill) {
-    return <Typography.Title level={4}>秒杀活动不存在</Typography.Title>
+    return <Empty description="秒杀活动不存在" style={{ marginTop: 48 }} />
   }
 
   const tag = PHASE_TAG[phase]

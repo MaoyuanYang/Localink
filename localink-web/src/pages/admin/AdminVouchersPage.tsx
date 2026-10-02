@@ -75,6 +75,7 @@ function NormalVoucherTab({ shopId }: { shopId: string }) {
   const [vouchers, setVouchers] = useState<VoucherVO[]>([])
   const [loading, setLoading] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const [editing, setEditing] = useState<VoucherVO | null>(null)
   const [form] = Form.useForm<AmountFormValues>()
 
@@ -109,6 +110,8 @@ function NormalVoucherTab({ shopId }: { shopId: string }) {
   }
 
   const handleSubmit = async (values: AmountFormValues) => {
+    setSubmitting(true)
+    try {
     const payload = {
       shopId,
       title: values.title,
@@ -126,6 +129,9 @@ function NormalVoucherTab({ shopId }: { shopId: string }) {
       messageApi.success('券已创建（C 端商户详情可见）')
     }
     setModalOpen(false)
+    } finally {
+      setSubmitting(false)
+    }
     load()
   }
 
@@ -165,6 +171,7 @@ function NormalVoucherTab({ shopId }: { shopId: string }) {
         title={editing ? `编辑普通券：${editing.title}` : '新建普通券'}
         open={modalOpen}
         form={form}
+        confirmLoading={submitting}
         onCancel={() => setModalOpen(false)}
         onSubmit={handleSubmit}
         withStatus
@@ -178,6 +185,7 @@ function SeckillVoucherTab({ shopId }: { shopId: string }) {
   const [seckills, setSeckills] = useState<SeckillVoucherVO[]>([])
   const [loading, setLoading] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const [editing, setEditing] = useState<SeckillVoucherVO | null>(null)
   const [form] = Form.useForm<SeckillFormValues>()
 
@@ -220,6 +228,8 @@ function SeckillVoucherTab({ shopId }: { shopId: string }) {
       messageApi.warning('请选择活动时间')
       return
     }
+    setSubmitting(true)
+    try {
     const payload = {
       shopId,
       title: values.title,
@@ -241,6 +251,9 @@ function SeckillVoucherTab({ shopId }: { shopId: string }) {
       messageApi.success('活动已创建（库存已预热；开抢前自动投预通知）')
     }
     setModalOpen(false)
+    } finally {
+      setSubmitting(false)
+    }
     load()
   }
 
@@ -289,6 +302,7 @@ function SeckillVoucherTab({ shopId }: { shopId: string }) {
         open={modalOpen}
         onCancel={() => setModalOpen(false)}
         onOk={() => form.submit()}
+        confirmLoading={submitting}
         destroyOnClose
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
@@ -345,6 +359,7 @@ function AmountModal({
   title,
   open,
   form,
+  confirmLoading,
   onCancel,
   onSubmit,
   withStatus,
@@ -352,12 +367,13 @@ function AmountModal({
   title: string
   open: boolean
   form: ReturnType<typeof Form.useForm<AmountFormValues>>[0]
+  confirmLoading?: boolean
   onCancel: () => void
   onSubmit: (values: AmountFormValues) => Promise<void>
   withStatus?: boolean
 }) {
   return (
-    <Modal title={title} open={open} onCancel={onCancel} onOk={() => form.submit()} destroyOnClose>
+    <Modal title={title} open={open} onCancel={onCancel} onOk={() => form.submit()} confirmLoading={confirmLoading} destroyOnClose>
       <Form form={form} layout="vertical" onFinish={onSubmit}>
         <Form.Item name="title" label="券标题" rules={[{ required: true, message: '必填' }]}>
           <Input />
