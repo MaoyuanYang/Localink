@@ -48,6 +48,17 @@ public class GlobalExceptionHandler {
         return Result.fail(BaseCode.PARAM_ERROR, "缺少请求参数: " + e.getParameterName());
     }
 
+    /**
+     * 请求参数类型不匹配（如 ?page=abc 传给 long）：T2 修复 F-2——此前落入 Exception
+     * 兜底返回 500+40000，现对齐 BindException 口径返回 200+40001。
+     */
+    @ExceptionHandler(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class)
+    public Result<Void> handleTypeMismatch(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException e) {
+        String name = e.getName();
+        log.warn("参数类型不匹配: {}={}", name, e.getValue());
+        return Result.fail(BaseCode.PARAM_ERROR, "参数格式错误: " + name);
+    }
+
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<Result<Void>> handleNoResourceFound(NoResourceFoundException e) {
         log.warn("资源不存在: {}", e.getResourcePath());

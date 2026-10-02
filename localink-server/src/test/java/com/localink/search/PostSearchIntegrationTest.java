@@ -262,6 +262,31 @@ class PostSearchIntegrationTest {
     }
 
     @Test
+    void likeResyncsLikedCountToEsDoc() throws Exception {
+        // T2 修复 F-8：赞数是 ES 索引时快照，点赞后应通过 UPSERT 重发刷新（发帖 1 次 + 点赞 1 次）
+        Long postId = createPostViaApi("点赞同步验证帖", "赞数快照刷新");
+        assertTrue(awaitDoc(postId, true));
+        mockMvc.perform(post("/api/post/{id}/like", postId).header("Authorization", token))
+                .andExpect(jsonPath("$.code").value(0));
+        verify(messageProducer, org.mockito.Mockito.times(2)).sendAsync(
+                ArgumentMatchers.eq(MqTopics.POST_SEARCH_SYNC),
+                ArgumentMatchers.eq(String.valueOf(postId)),
+                ArgumentMatchers.argThat(m -> m instanceof PostSearchMessage msg
+                        && postId.equals(msg.postId()) && msg.event() == PostSyncEvent.UPSERT));
+        long deadline = System.currentTimeMillis() + 20_000;
+        Integer liked = null;
+        while (System.currentTimeMillis() < deadline) {
+            PostDocument doc = client.get(g -> g.index("post").id(String.valueOf(postId)), PostDocument.class).source();
+            if (doc != null && doc.getLiked() != null && doc.getLiked() >= 1) {
+                liked = doc.getLiked();
+                break;
+            }
+            Thread.sleep(150);
+        }
+        assertNotNull(liked, "点赞后 ES 文档 liked 应被 UPSERT 刷新为最新赞数");
+    }
+
+    @Test
     void rebuildAllIndexesOnlyAuditedPosts() throws Exception {
         insertPostDirectly("过审火锅帖一", "内容", null, nowMinusSeconds(30));
         insertPostDirectly("过审火锅帖二", "内容", null, nowMinusSeconds(20));

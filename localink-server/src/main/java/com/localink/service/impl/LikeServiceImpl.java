@@ -17,6 +17,10 @@ import com.localink.framework.holder.UserHolder;
 import com.localink.mapper.PostCommentMapper;
 import com.localink.mapper.PostLikeMapper;
 import com.localink.mapper.PostMapper;
+import com.localink.mq.MessageProducer;
+import com.localink.mq.MqTopics;
+import com.localink.mq.PostSearchMessage;
+import com.localink.mq.PostSyncEvent;
 import com.localink.service.LikeService;
 import com.localink.service.PostService;
 import lombok.RequiredArgsConstructor;
@@ -45,6 +49,7 @@ public class LikeServiceImpl implements LikeService {
     private final PostService postService;
     private final RedisCache redisCache;
     private final KeyBuilder keyBuilder;
+    private final MessageProducer messageProducer;
 
     @Override
     @Transactional
@@ -62,8 +67,10 @@ public class LikeServiceImpl implements LikeService {
                 .eq(Post::getId, postId)
                 .setSql("liked = liked + 1"));
         KeyBuild rankKey = keyBuilder.build(KeyManage.POST_LIKE_TOP);
-        TxCallbacks.afterCommit(() ->
-                redisCache.zsets().incrementScore(rankKey, String.valueOf(postId), 1));
+        TxCallbacks.afterCommit(() -> {
+            redisCache.zsets().incrementScore(rankKey, String.valueOf(postId), 1);
+            syncLikedToSearch(postId);
+        });
         return post.getLiked() + 1;
     }
 
@@ -91,6 +98,7 @@ public class LikeServiceImpl implements LikeService {
             if (score == null || score <= 0) {
                 redisCache.zsets().remove(rankKey, String.valueOf(postId));
             }
+            syncLikedToSearch(postId);
         });
         return Math.max(post.getLiked() - 1, 0);
     }
@@ -136,5 +144,14 @@ public class LikeServiceImpl implements LikeService {
             throw new LocalinkException(BaseCode.NOT_FOUND, "帖子不存在或未过审");
         }
         return post;
+    }
+
+    /**
+     * T2 修复 F-8：赞数变更后重发 UPSERT——ES 文档的 liked 是索引时快照，
+     * 复用 post-search-sync 全量幂等重建刷新（fire-and-forget，失败仅日志，与生产端同口径）。
+     */
+    private void syncLikedToSearch(Long postId) {
+        messageProducer.sendAsync(MqTopics.POST_SEARCH_SYNC, String.valueOf(postId),
+                new PostSearchMessage(postId, PostSyncEvent.UPSERT));
     }
 }
