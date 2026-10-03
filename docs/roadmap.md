@@ -63,3 +63,4 @@
 - [x] **W3 社区 + 后台扩展**：Feed/发帖（图片上传）/评论/点赞/关注/搜索/热榜/签到 + 审核队列 + Top 买家/对账看板 —— 前置：M6（2026-10-02 完成，含 4 个 admin 补口端点与社区 VO id 字符串化/时间格式两处既有契约修复，任务卡 `docs/iterations/w3-community.md`）
 - [x] **W4 打磨**：加载/空态、README、部署说明（nginx） —— 前置：M7（2026-10-02 完成，含 SearchPage 参数闭包修复、一键脚本 dev-all.ps1、演示剧本 demo-script.md、nginx 生产节；任务卡 `docs/iterations/w4-polish.md`。**Web 前端线 W0~W4 全部完成，roadmap 全清**）
 - [x] **T1 深度体检**：前后端整体体检 + 既有测试方案评估 + 新增测试角度（W0~W4 运行时首验、黑盒 part3 46 断言、后端安全/负面矩阵 5 类 29 用例、前端 Vitest 32 用例、验证脚本 4 处缺陷修复、种子数据 cp1252 双重编码还原；报告 [docs/VERIFICATION.md](VERIFICATION.md)、任务卡 `docs/iterations/t1-deep-audit.md`）—— 2026-10-02
+- [x] **T2 体检发现全量修复**：F-1~F-18 逐项处置（异常 handler 40001、点赞 ES 同步、孤儿券数据清除、前端空值保护/坐标行/分包、charset 命令、CI+JaCoCo 接入、脚本 part1 修绿 46/46；含 F-3 勘误——分页钳制一直有效系 T1 误报）—— 任务卡 `docs/iterations/t2-audit-fixes.md` —— 2026-10-02

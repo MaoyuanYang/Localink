@@ -49,7 +49,7 @@
 
 ### P3 加固（已修）
 
-线程池优雅收尾（waitForTasksToComplete+10s）、Caffeine `recordStats()`、Redisson `setTimeout(3000)/setPingConnectionInterval(30000)`、布隆初始化只查 id 列、DFA **分域扫描**（title/content 不再拼接跨字段误杀）、评论删除条件递减防负数 + 楼中楼 `LIMIT 500`、上传 delete `normalize()+startsWith` 防穿越、`UserBriefVO.userId` 字符串化（D-14，防 19 位精度丢失）、`MetricsPort`（common 接口/starter 可选注入/server Micrometer 实现）+ **actuator 引入**（D-15：`localink.rollback.failure`/`localink.ratelimit.rejected`/`localink.reconcile.compensated`/`localink.order.close` 暴露到 `/actuator/metrics`，health/info/metrics 端点开放）。
+线程池优雅收尾（waitForTasksToComplete+10s）、Caffeine `recordStats()`、Redisson `setTimeout(3000)/setPingConnectionInterval(30000)`、布隆初始化只查 id 列、DFA **分域扫描**（title/content 不再拼接跨字段误杀）、评论删除条件递减防负数 + 楼中楼 `LIMIT 500`、上传 delete `normalize()+startsWith` 防穿越、`UserBriefVO.userId` 字符串化（D-14，防 19 位精度丢失）、`MetricsPort`（common 接口/starter 可选注入/server Micrometer 实现）+ **actuator 引入**（D-15：`localink.rollback.failure`/`localink.ratelimit.rejected`/`localink.reconcile.compensated`/`localink.order.close` 暴露到 `/actuator/metrics`，health/info/metrics 端点开放）。> T2 补注（F-7）：四个计数器均为**事件触发式懒注册**——`rollback.failure`/`reconcile.compensated`/`order.close` 只在对应事件路径首次发生时才出现在 `/actuator/metrics` 列表（`order.close` 仅对账补关单路径计数，手动/延迟队列关单不计），无事件≠无埋点。
 
 ### P3 保留项（已声明取舍，不改行为）
 

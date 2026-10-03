@@ -29,12 +29,14 @@ docker compose ps                                # 确认全部 healthy
 
 ```bash
 # ① 主库 localink：建库 + 12 张表（10 非分片业务表 + 订单/对账日志的逻辑表）+ 种子数据
-docker exec -i localink-mysql mysql -uroot -plocalink123 < sql/localink.sql
+docker exec -i localink-mysql mysql -uroot -plocalink123 --default-character-set=utf8mb4 < sql/localink.sql
 
 # ② 分片物理表：localink 与 localink_1 两库各建 lk_voucher_order_0/1、lk_voucher_reconcile_log_0/1，
 #    并在主库建 lk_order_route 路由表（① 中的逻辑订单表在运行期不被 ShardingSphere 使用，留作 DDL 参照）
-docker exec -i localink-mysql mysql -uroot -plocalink123 < sql/sharding.sql
+docker exec -i localink-mysql mysql -uroot -plocalink123 --default-character-set=utf8mb4 < sql/sharding.sql
 ```
+
+> **必须带 `--default-character-set=utf8mb4`**：Windows 下 mysql 客户端默认字符集为 cp1252，缺该参数会把 UTF-8 种子数据写成本地双重编码乱码（中文店铺名/区域/地址全坏，T1 体检 F-1 实测）。
 
 验证（两库各应有订单物理表，主库应有种子商户）：
 

@@ -182,4 +182,34 @@
 
 ---
 
-*报告由 project-verify 审计流程生成（T1 深度体检主题）。代码位置以 main @ 33282fc 为准；新增测试与脚本修复在 feature/t1-deep-audit 分支。*
+## 12. T2 修复附录（2026-10-02，feature/t2-audit-fixes）
+
+§7 全部可修复发现已按用户指示修复（业务代码 2 处、前端 3 处、文档 4 处、CI/覆盖率接入、数据与环境卫生、验证脚本修绿）。逐项映射：
+
+| # | 处置 | 说明 |
+|---|---|---|
+| F-1 | ✅ 文档修复 | deploy.md §3 两条导入命令补 `--default-character-set=utf8mb4` + 原因注记块 |
+| F-2 | ✅ 代码修复 | `GlobalExceptionHandler` 补 `MethodArgumentTypeMismatchException` → 200+40001（含参数名）；运行时实证 `?page=abc` → `{"code":40001,"message":"参数格式错误: page"}`；钉死测试改为正向断言 |
+| **F-3** | ⚠️ **勘误（非修复）** | **T1 误报**：精确计数复核 `size=100000→50 条 / size=-5→1 条 / size=0→1 条 / page=0→current=1`——钳制（1..50）自 M8 B-19 起一直存在，T1 判断依据截断响应未数条数。原"分页无钳制可拉全表"结论撤销；测试强化为可观测钳制断言（records≤50、current=1） |
+| F-4 | ✅（T1 已修） | 脚本表名修复已在 T1 落地，T2 补齐 part1 其余陈旧断言后 **part1 46/46 全绿**（T1 时 29/15） |
+| F-5 | ✅ 双修 | 根因数据：**20 张孤儿 type=2 券（缺 lk_seckill_voucher 行，M8 残留）及其 20 条订单/路由/流水一并清除**（备份 `_t2_orphan_vouchers`/`_t2_orphan_routes` 留底）；前端三处空值兜底（admin 两下拉 + C 端时间行 → "时间缺失"） |
+| F-6 | ✅（T1 已修） | cleanup ES 索引名已在 T1 修复 |
+| F-7 | ✅ 文档注记 | m8-audit-fixes.md D-15 处补"事件触发式懒注册"口径注记 |
+| F-8 | ✅ 代码修复 | `LikeServiceImpl.like/unlike` afterCommit 复用 `post-search-sync` 发 `UPSERT`（幂等全量重建，对齐 PostServiceImpl Kafka 直发先例）；**端到端实证：点赞前 ES 搜索赞 [0] → 点赞 → [1]**；新增 `likeResyncsLikedCountToEs` 集成测试锁定 |
+| F-9 | —（口径保留） | remoteAddr 限流为设计取舍，part3 已带退避；不改 |
+| F-10 | ✅ 前端修复 | 店铺详情删除坐标行；GUI 快照验证（坐标行消失、地址/营业时间正常） |
+| F-11 | —（观察） | 热榜自然衰减，无需修复 |
+| F-12 | ✅（T1 已修） | part2 已改自建店铺；shop1 已还原 |
+| F-13 | ✅ 基线句注明 | T1 已在 README 基线句注明 2 skipped |
+| F-14 | —（已声明 skip） | 通知中心为 W3/W4 已声明演进项，非缺陷 |
+| F-15 | ✅ 前端构建 | vite manualChunks 分包：app chunk 1.44MB→**70KB**，vendor-react 114KB / vendor-antd 1.25MB（独立长缓存块；antd 全量引入为已知取舍） |
+| F-16 | ✅ 环境清理 | 孤儿 Kafka 消费组 119 个全删，仅保留现行 3 组 |
+| F-17 | ✅（T1 已修） | README 状态段已修 |
+| F-18 | ✅ 文档注记 | middleware-setup.md §5 排查表补 max_connections 条目（≥300 + SET GLOBAL 用法） |
+| G-3 | ✅ CI 接入 | `.github/workflows/ci.yml`：前端 npm ci+test+build + 后端编译级（package -DskipTests 含测试编译） |
+| G-4 | ✅ JaCoCo | 父 pom 接入 prepare-agent+report（只出数不门禁）；**全仓行覆盖 88.9% / 指令 89.1%**（server 88.8%、cache 93.4%、search 100%）；修复：仓库路径含中文目录时 exec 静默写失败 → 统一落 `${java.io.tmpdir}` |
+
+**修复后基线**：后端 **346/346**（server 246 = 245+1 新增 like-ES 用例；2 skipped 同前），前端 32/32，黑盒三段 **46+18+46=110 断言全绿**。环境卫生：`_t1_*` 快照表已删（种子数据还原经 GUI 演示确认）；黑盒自建店铺残留 6 家清理。
+---
+
+*报告由 project-verify 审计流程生成（T1 深度体检 + T2 全量修复）。T1 代码位置以 main @ 33282fc 为准；T1 资产在 feature/t1-deep-audit（PR #86），T2 修复在 feature/t2-audit-fixes。*

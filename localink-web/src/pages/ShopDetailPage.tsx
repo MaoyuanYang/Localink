@@ -87,9 +87,6 @@ export default function ShopDetailPage() {
           <Descriptions column={1} size="small">
             <Descriptions.Item label="地址">{shop.area} {shop.address}</Descriptions.Item>
             <Descriptions.Item label="营业时间">{shop.openHours || '—'}</Descriptions.Item>
-            <Descriptions.Item label="坐标">
-              {shop.longitude ?? '—'}, {shop.latitude ?? '—'}
-            </Descriptions.Item>
           </Descriptions>
         </Col>
       </Row>
@@ -117,7 +114,7 @@ export default function ShopDetailPage() {
                     {sv.minLevel > 0 ? ` · 需 Lv.${sv.minLevel}` : ''}
                   </Typography.Paragraph>
                   <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                    {sv.beginTime} ~ {sv.endTime}
+                    {sv.beginTime ? `${sv.beginTime} ~ ${sv.endTime}` : '活动时间缺失'}
                   </Typography.Text>
                 </Card>
               )

@@ -57,7 +57,10 @@ export default function AdminSubscribePage() {
             placeholder="选择秒杀活动"
             value={voucherId}
             onChange={setVoucherId}
-            options={seckills.map((s) => ({ value: s.voucherId, label: `${s.title}（${s.beginTime} 起）` }))}
+            options={seckills.map((s) => ({
+              value: s.voucherId,
+              label: s.beginTime ? `${s.title}（${s.beginTime} 起）` : `${s.title}（时间缺失）`,
+            }))}
           />
           {voucherId && <Button onClick={() => loadStats(voucherId)} loading={loading}>刷新</Button>}
         </Space>
