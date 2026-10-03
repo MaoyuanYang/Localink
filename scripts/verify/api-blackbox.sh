@@ -88,7 +88,7 @@ echo "================ S4 秒杀两步流（M3/M4） ================"
 BT=$(now_min -2); ET=$(now_min 120)
 R=$(req POST "$BASE/api/seckill-voucher" "$T1" '{"shopId":1,"title":"[verify]blackbox-voucher","payValue":100,"actualValue":200,"stock":5,"minLevel":0,"beginTime":"'$BT'","endTime":"'$ET'"}')
 check "S4a 创建秒杀券(stock=5)" 0 "$(code_of "$R")"
-VID=$(q "SELECT id FROM localink.lk_seckill_voucher WHERE title='[verify]blackbox-voucher' ORDER BY id DESC LIMIT 1")
+VID=$(q "SELECT id FROM localink.lk_voucher WHERE title='[verify]blackbox-voucher' ORDER BY id DESC LIMIT 1")
 echo "      voucherId=$VID"
 R=$(req POST "$BASE/api/seckill-voucher/$VID/token" "$T1"); check "S4b 申请令牌" 0 "$(code_of "$R")"
 TOK=$(grep -o '"data":"[^"]*"' <<<"$R" | head -1 | cut -d'"' -f4)

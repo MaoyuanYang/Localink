@@ -2,7 +2,7 @@
 # 黑盒补验（part2）：修正 part1 中的脚本问题后重验——UTF-8 文件体、必填字段、时序
 set -u
 BASE=http://localhost:8086
-M="docker exec localink-mysql mysql -uroot -plocalink123 -N"
+M="docker exec localink-mysql mysql -uroot -plocalink123 --default-character-set=utf8mb4 -N"
 PASS=0; FAIL=0
 check() { if [ "$2" = "$3" ]; then PASS=$((PASS+1)); printf 'PASS  %-50s (%s)\n' "$1" "$3"; else FAIL=$((FAIL+1)); printf 'FAIL  %-50s expected=%s actual=%s\n' "$1" "$2" "$3"; fi; }
 check_true() { if [ "$2" -eq 0 ]; then PASS=$((PASS+1)); echo "PASS  $1"; else FAIL=$((FAIL+1)); echo "FAIL  $1"; fi; }
@@ -21,16 +21,19 @@ login_user() { local r tok code B=/tmp/verify-login.json
   tok=$(grep -o '"data":"[^"]*"' <<<"$r" | head -1 | cut -d'"' -f4); echo "$tok"; }
 J=/tmp/verify-p2.json   # UTF-8 请求体文件（printf 写入，避开终端 GBK）
 
-echo "================ P2-S1 补验：商户更新+缓存失效 ================"
+echo "================ P2-S1 补验：商户更新+缓存失效（自建店铺，不动种子数据） ================"
 T1=$(login_user 13977770001)
-printf '{"id":1,"name":"[verify]renamed-p2","typeId":1,"address":"x","avgPrice":100,"longitude":116.397,"latitude":39.909}' > "$J"
-R=$(req PUT "$BASE/api/shop" "$T1" "$J"); check "P2-1a 更新商户名(含经纬度)" 0 "$(code_of "$R")"
+printf '{"name":"[verify]p2-shop","typeId":1,"address":"verify road 1","avgPrice":100,"longitude":120.163,"latitude":30.274}' > "$J"
+R=$(req POST "$BASE/api/shop" "$T1" "$J"); check "P2-1a 自建商户" 0 "$(code_of "$R")"
+SID=$($M -e "SELECT id FROM localink.lk_shop WHERE name='[verify]p2-shop' ORDER BY id DESC LIMIT 1" 2>/dev/null)
+echo "      shopId=$SID"
+R=$(req GET "$BASE/api/shop/$SID"); check "P2-1b 新商户可读(bloom-after-insert)" 0 "$(code_of "$R")"
+printf '{"id":%s,"name":"[verify]p2-shop-renamed","typeId":1,"address":"verify road 1","avgPrice":100,"longitude":120.163,"latitude":30.274}' "$SID" > "$J"
+R=$(req PUT "$BASE/api/shop" "$T1" "$J"); check "P2-1c 更新商户名(含经纬度)" 0 "$(code_of "$R")"
 sleep 1
-R=$(curl -s -m 10 "$BASE/api/shop/1")
-echo "$R" | grep -q 'renamed-p2' && check_true "P2-1b 改名后读到新值(缓存失效生效)" 0 || check_true "P2-1b 改名后读到新值" 1
-OLD=$($M -e "SELECT name FROM localink.lk_shop WHERE id=1" 2>/dev/null)
-printf '{"id":1,"name":"'"$OLD"'","typeId":1,"address":"x","avgPrice":100,"longitude":116.397,"latitude":39.909}' > "$J"
-req PUT "$BASE/api/shop" "$T1" "$J" >/dev/null; echo "      (已还原: $OLD)"
+R=$(curl -s -m 10 "$BASE/api/shop/$SID")
+echo "$R" | grep -q 'p2-shop-renamed' && check_true "P2-1d 改名后读到新值(缓存失效生效)" 0 || check_true "P2-1d 改名后读到新值" 1
+R=$(req DELETE "$BASE/api/shop/$SID" "$T1"); check "P2-1e 删除自建商户" 0 "$(code_of "$R")"
 
 echo "================ P2-S2 秒杀两步流全链路 ================"
 BT=$(date "+%Y-%m-%d %H:%M:%S" -d "-2 min"); ET=$(date "+%Y-%m-%d %H:%M:%S" -d "+120 min")
@@ -38,7 +41,7 @@ printf '{"shopId":1,"title":"[verify]p2-voucher","payValue":100,"actualValue":20
 R=$(req POST "$BASE/api/seckill-voucher" "$T1" "$J")
 if [ "$(code_of "$R")" != "0" ]; then echo "      创建失败原文: $(head -c 300 <<<"$R")"; fi
 check "P2-2a 创建秒杀券(stock=5)" 0 "$(code_of "$R")"
-VID=$($M -e "SELECT id FROM localink.lk_seckill_voucher WHERE title='[verify]p2-voucher' ORDER BY id DESC LIMIT 1" 2>/dev/null)
+VID=$($M -e "SELECT id FROM localink.lk_voucher WHERE title='[verify]p2-voucher' ORDER BY id DESC LIMIT 1" 2>/dev/null)
 echo "      voucherId=$VID"
 R=$(req POST "$BASE/api/seckill-voucher/$VID/token" "$T1"); check "P2-2b 申请令牌" 0 "$(code_of "$R")"
 TOK=$(grep -o '"data":"[^"]*"' <<<"$R" | head -1 | cut -d'"' -f4)
@@ -89,7 +92,7 @@ echo "$R" | grep -q 'p2feed998' && check_true "P2-4b user1 Feed 收到新帖(推
 # 共同关注：user1 与 user2 都关注 user3
 req POST "$BASE/api/follow/$U3" "$T1" >/dev/null; req POST "$BASE/api/follow/$U3" "$T2" >/dev/null
 R=$(req GET "$BASE/api/follow/common/$U2" "$T1")
-echo "$R" | grep -q "\"id\":\"$U3\"" && check_true "P2-4c 共同关注交集含 user3(id 字符串)" 0 || { echo "      响应: $(head -c 300 <<<"$R")"; check_true "P2-4c 共同关注交集" 1; }
+echo "$R" | grep -q "\"userId\":\"$U3\"" && check_true "P2-4c 共同关注交集含 user3(id 字符串)" 0 || { echo "      响应: $(head -c 300 <<<"$R")"; check_true "P2-4c 共同关注交集" 1; }
 
 echo "================ P2-S5 隐性词异步复审结果复查 ================"
 if [ -n "$RPID" ]; then
