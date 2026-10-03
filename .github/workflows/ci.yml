@@ -34,5 +34,8 @@ jobs:
           java-version: 21
           cache: maven
       # 集成测试需 MySQL/Redis/Kafka/ES 真实中间件（AGENTS.md §10 串行独占口径），
-      # CI 只做编译级门禁：package -DskipTests 会编译主代码与测试代码但不运行
-      - run: ./mvnw clean package -DskipTests -B -q
+      # CI 只做编译级门禁：package -DskipTests 会编译主代码与测试代码但不运行；
+      # mvnw 在 Windows 仓库里不带可执行位，先补 chmod
+      - run: |
+          chmod +x mvnw
+          ./mvnw clean package -DskipTests -B -q
